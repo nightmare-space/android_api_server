@@ -3,7 +3,9 @@ package android.hardware.input;
 import android.view.InputEvent;
 
 public class InputManagerGlobal {
-
+    public InputManagerGlobal(IInputManager im) {
+        throw new RuntimeException("STUB");
+    }
     /**
      * Gets an instance of the input manager global singleton.
      *

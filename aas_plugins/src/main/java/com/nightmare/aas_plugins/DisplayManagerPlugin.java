@@ -127,11 +127,17 @@ public class DisplayManagerPlugin extends AndroidAPIPlugin {
 //                | VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
                 // 这行能让魅族直接把 Launcher 启动到这个虚拟显示器上
 //                | VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
-                | VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
-                | VIRTUAL_DISPLAY_FLAG_OWN_FOCUS
-                | VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP;
+                | VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            flags |= VIRTUAL_DISPLAY_FLAG_TRUSTED | VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP | VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED;
+            flags |= VIRTUAL_DISPLAY_FLAG_TRUSTED
+                    | VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+                    | VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED
+                    | VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                flags |= VIRTUAL_DISPLAY_FLAG_OWN_FOCUS
+                        | VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP;
+            }
         }
         return flags;
     }
@@ -140,87 +146,89 @@ public class DisplayManagerPlugin extends AndroidAPIPlugin {
     public NanoHTTPD.Response handle(NanoHTTPD.IHTTPSession session) {
         String action = session.getParms().get("action");
         assert action != null;
-        if (action.equals("getDisplays")) {
-            // Android 11/12/13/14/15 (test on 2024.09.17) is ok
-            DisplayManager displayManager = null;
-            if (ContextStore.getContext() instanceof FakeContext) {
-                try {
-                    //noinspection JavaReflectionMemberAccess
-                    displayManager = DisplayManager.class.getDeclaredConstructor(Context.class).newInstance(ContextStore.getContext());
+        switch (action) {
+            case "getDisplays": {
+                // Android 11/12/13/14/15 (test on 2024.09.17) is ok
+                DisplayManager displayManager = null;
+                if (ContextStore.getContext() instanceof FakeContext) {
+                    try {
+                        //noinspection JavaReflectionMemberAccess
+                        displayManager = DisplayManager.class.getDeclaredConstructor(Context.class).newInstance(ContextStore.getContext());
 //                ReflectUtil.listAllObject(displayManager);
+                    } catch (IllegalAccessException | InstantiationException |
+                             InvocationTargetException |
+                             NoSuchMethodException e) {
+                        throw new RuntimeException(e);
+                    }
+                } else {
+                    displayManager = (DisplayManager) ContextStore.getContext().getSystemService(Context.DISPLAY_SERVICE);
+                }
+                Display[] displays = displayManager.getDisplays();
+                L.d("DisplaysHandler Invoke");
+                JSONObject jsonObjectResult = new JSONObject();
+                JSONArray jsonArray = new JSONArray();
+                for (Display display : displays) {
+                    JSONObject jsonObject = null;
+                    try {
+                        jsonObject = DisplayUtil.getDisplayInfo(display);
+                    } catch (JSONException e) {
+                        throw new RuntimeException(e);
+                    }
+                    jsonArray.put(jsonObject);
+                }
+                try {
+                    jsonObjectResult.put("datas", jsonArray);
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", jsonObjectResult.toString());
+            }
+            case "createVirtualDisplay": {
+                L.d("createVirtualDisplayWithSurfaceView invoke");
+                Map<String, String> params = session.getParms();
+                String useDeviceConfig = params.get("useDeviceConfig");
+                String displayName = params.get("displayName");
+                String width, height, density;
+                boolean useDeviceConfigBool = Boolean.parseBoolean(useDeviceConfig);
+                if (useDeviceConfigBool) {
+                    WindowManager windowManager = (WindowManager) FakeContext.get().getSystemService(Context.WINDOW_SERVICE);
+                    DisplayMetrics displayMetrics = new DisplayMetrics();
+                    windowManager.getDefaultDisplay().getRealMetrics(displayMetrics);
+                    width = displayMetrics.widthPixels + "";
+                    height = displayMetrics.heightPixels + "";
+                    density = displayMetrics.densityDpi + "";
+                } else {
+                    width = params.get("width");
+                    height = params.get("height");
+                    density = params.get("density");
+                }
+                assert width != null;
+                assert height != null;
+                assert density != null;
+                VirtualDisplay display = null;
+                DisplayManager displayManager = null;
+                try {
+                    // Android 11/12/13/14/15 (test on 2024.09.17) is ok
+                    //noinspection JavaReflectionMemberAccess
+                    displayManager = DisplayManager.class.getDeclaredConstructor(Context.class).newInstance(FakeContext.get());
                 } catch (IllegalAccessException | InstantiationException |
                          InvocationTargetException |
                          NoSuchMethodException e) {
                     throw new RuntimeException(e);
                 }
-            } else {
-                displayManager = (DisplayManager) ContextStore.getContext().getSystemService(Context.DISPLAY_SERVICE);
-            }
-            Display[] displays = displayManager.getDisplays();
-            L.d("DisplaysHandler Invoke");
-            JSONObject jsonObjectResult = new JSONObject();
-            JSONArray jsonArray = new JSONArray();
-            for (Display display : displays) {
-                JSONObject jsonObject = null;
-                try {
-                    jsonObject = DisplayUtil.getDisplayInfo(display);
-                } catch (JSONException e) {
-                    throw new RuntimeException(e);
+                if (displayName == null) {
+                    displayName = "applib-vd";
+                    displayName = "Virtual Display";
                 }
-                jsonArray.put(jsonObject);
-            }
-            try {
-                jsonObjectResult.put("datas", jsonArray);
-            } catch (JSONException e) {
-                throw new RuntimeException(e);
-            }
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", jsonObjectResult.toString());
-        }
-        if (action.equals("createVirtualDisplay")) {
-            L.d("createVirtualDisplayWithSurfaceView invoke");
-            Map<String, String> params = session.getParms();
-            String useDeviceConfig = params.get("useDeviceConfig");
-            String displayName = params.get("displayName");
-            String width, height, density;
-            boolean useDeviceConfigBool = Boolean.parseBoolean(useDeviceConfig);
-            if (useDeviceConfigBool) {
-                WindowManager windowManager = (WindowManager) FakeContext.get().getSystemService(Context.WINDOW_SERVICE);
-                DisplayMetrics displayMetrics = new DisplayMetrics();
-                windowManager.getDefaultDisplay().getRealMetrics(displayMetrics);
-                width = displayMetrics.widthPixels + "";
-                height = displayMetrics.heightPixels + "";
-                density = displayMetrics.densityDpi + "";
-            } else {
-                width = params.get("width");
-                height = params.get("height");
-                density = params.get("density");
-            }
-            assert width != null;
-            assert height != null;
-            assert density != null;
-            VirtualDisplay display = null;
-            DisplayManager displayManager = null;
-            try {
-                // Android 11/12/13/14/15 (test on 2024.09.17) is ok
-                //noinspection JavaReflectionMemberAccess
-                displayManager = DisplayManager.class.getDeclaredConstructor(Context.class).newInstance(FakeContext.get());
-            } catch (IllegalAccessException | InstantiationException | InvocationTargetException |
-                     NoSuchMethodException e) {
-                throw new RuntimeException(e);
-            }
-            if (displayName == null) {
-                displayName = "applib-vd";
-                displayName = "Virtual Display";
-            }
-            Surface surface = getVDSurface();
-            display = displayManager.createVirtualDisplay(
-                    displayName,
-                    Integer.parseInt(width),
-                    Integer.parseInt(height),
-                    Integer.parseInt(density),
-                    surface,
-                    getVirtualDisplayFlags()
-            );
+                Surface surface = getVDSurface();
+                display = displayManager.createVirtualDisplay(
+                        displayName,
+                        Integer.parseInt(width),
+                        Integer.parseInt(height),
+                        Integer.parseInt(density),
+                        surface,
+                        getVirtualDisplayFlags()
+                );
 //            try {
 //                display = ServiceManager.getDisplayManager().createVirtualDisplay(
 //                        displayName,
@@ -234,17 +242,17 @@ public class DisplayManagerPlugin extends AndroidAPIPlugin {
 //                     InstantiationException | InvocationTargetException e) {
 //                throw new RuntimeException(e);
 //            }
-            assert display != null;
-            cache.put(display.getDisplay().getDisplayId(), display);
-            JSONObject json = null;
-            try {
-                json = DisplayUtil.getDisplayInfo(display.getDisplay());
-            } catch (JSONException e) {
-                throw new RuntimeException(e);
-            }
+                assert display != null;
+                cache.put(display.getDisplay().getDisplayId(), display);
+                JSONObject json = null;
+                try {
+                    json = DisplayUtil.getDisplayInfo(display.getDisplay());
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
 
-            Display display1 = (Display) ReflectionHelper.invokeMethod(displayManager, "getDisplay", display.getDisplay().getDisplayId());
-            L.d("display1 -> " + display1);
+                Display display1 = (Display) ReflectionHelper.invokeMethod(displayManager, "getDisplay", display.getDisplay().getDisplayId());
+                L.d("display1 -> " + display1);
 //
 //            IBinder displayToken = DisplayControl.getPhysicalDisplayToken(display.getDisplay().getDisplayId());
 //            L.d("displayToken -> " + displayToken);
@@ -252,11 +260,12 @@ public class DisplayManagerPlugin extends AndroidAPIPlugin {
 //            Object token = ReflectUtil.invokeMethod(display, "getToken");
 //            L.d("token -> " + token);
 
-            return newFixedLengthResponse(
-                    NanoHTTPD.Response.Status.OK,
-                    "application/json",
-                    json.toString()
-            );
+                return newFixedLengthResponse(
+                        NanoHTTPD.Response.Status.OK,
+                        "application/json",
+                        json.toString()
+                );
+            }
         }
         String displayId = session.getParms().get("id");
         assert displayId != null;

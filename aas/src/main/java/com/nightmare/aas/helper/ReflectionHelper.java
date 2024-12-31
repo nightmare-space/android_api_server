@@ -27,7 +27,13 @@ public class ReflectionHelper {
             field.setAccessible(true);
             return unsafeCast(field.get(obj));
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            try {
+                Field field = obj.getClass().getSuperclass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return unsafeCast(field.get(obj));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
         }
     }
 

@@ -6,6 +6,7 @@ import android.os.Looper;
 import com.nightmare.aas.AndroidAPIServer;
 import com.nightmare.aas_plugins.ActivityManagerPlugin;
 import com.nightmare.aas_plugins.ChangeDisplayHandler;
+import com.nightmare.aas_plugins.DeviceInfoPlugin;
 import com.nightmare.aas_plugins.DisplayManagerPlugin;
 import com.nightmare.aas_plugins.FilePlugin;
 import com.nightmare.aas_plugins.PackageManagerPlugin;
@@ -34,6 +35,7 @@ public class AASIntegrate {
         server.registerPlugin(new ActivityManagerPlugin());
         server.registerPlugin(new ActivityTaskManagerPlugin());
         server.registerPlugin(new FilePlugin());
+        server.registerPlugin(new DeviceInfoPlugin());
     }
 
 }

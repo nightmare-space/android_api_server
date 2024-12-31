@@ -3,17 +3,20 @@ package com.nightmare.aas_plugins;
 import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 
 import android.annotation.SuppressLint;
+import android.os.Environment;
 
 import com.nightmare.aas.foundation.AndroidAPIPlugin;
 import com.nightmare.aas.helper.L;
 
 import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Field;
 import java.net.URLConnection;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -23,6 +26,7 @@ import java.util.Map;
 import fi.iki.elonen.NanoHTTPD;
 
 public class FilePlugin extends AndroidAPIPlugin {
+
     @Override
     public String route() {
         return "/file";
@@ -35,6 +39,15 @@ public class FilePlugin extends AndroidAPIPlugin {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Missing action parameter");
         }
         switch (action) {
+            case "home":
+                String path = Environment.getExternalStorageDirectory().getAbsolutePath();
+                JSONObject result = new JSONObject();
+                try {
+                    result.put("path", path);
+                } catch (Exception e) {
+                    L.e("HomeHandler Exception: " + e);
+                }
+                return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", result.toString());
             case "dir":
                 return handleDir(session.getParms());
             case "delete":
@@ -109,18 +122,27 @@ public class FilePlugin extends AndroidAPIPlugin {
         }
 
         if (session.getMethod() == NanoHTTPD.Method.HEAD) {
-            NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mimeType, null, 0);
-            response.addHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileLength);
+            NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/octet-stream", null, 0);
+            // 反射修改 response contentLength
+            Field contentLengthField = null;
+            try {
+                contentLengthField = response.getClass().getDeclaredField("contentLength");
+                contentLengthField.setAccessible(true);
+                contentLengthField.set(response, contentLength);
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                e.printStackTrace();
+            }
             response.addHeader("Accept-Ranges", "bytes");
+//            response.addHeader("Content-Length", String.valueOf(contentLength));
             return response;
         } else {
-
             try {
                 NanoHTTPD.Response.Status status = NanoHTTPD.Response.Status.OK;
-                if(rangeHeader != null && rangeHeader.startsWith("bytes=")){
+                if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
                     status = NanoHTTPD.Response.Status.PARTIAL_CONTENT;
                 }
                 InputStream fileInputStream = new FileInputStream(file);
+                //noinspection ResultOfMethodCallIgnored
                 fileInputStream.skip(start);
                 NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(status, mimeType, fileInputStream, contentLength);
                 response.addHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileLength);
@@ -137,27 +159,6 @@ public class FilePlugin extends AndroidAPIPlugin {
         }
     }
 
-    private NanoHTTPD.Response handleFileBytes(Map<String, String> params) {
-        String path = params.get("path");
-        if (path == null) {
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Missing parameters");
-        }
-        File file = new File(path);
-        if (!file.exists() || !file.isFile()) {
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, "text/plain", "File not found");
-        }
-        try {
-            InputStream fileInputStream = readFileBytes(file);
-            String mimeType = URLConnection.guessContentTypeFromName(file.getName());
-            if (mimeType == null) {
-                mimeType = "application/octet-stream";
-            }
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mimeType, fileInputStream, file.length());
-        } catch (IOException e) {
-            L.e("FileBytes Exception: " + e);
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, "text/plain", "Error reading file");
-        }
-    }
 
     private NanoHTTPD.Response handleRename(Map<String, String> params) {
         String path = params.get("path");
