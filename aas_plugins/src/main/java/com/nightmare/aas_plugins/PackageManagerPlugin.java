@@ -29,10 +29,12 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
@@ -98,51 +100,6 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
     @Override
     public String route() {
         return "/package_manager";
-    }
-
-    public void printFlagsStatus(int flag) {
-
-        List<Integer> flagValues = new ArrayList<>();
-        List<String> flagNames = new ArrayList<>();
-        Field[] fields = ApplicationInfo.class.getFields();
-        for (Field field : fields) {
-            if (field.getName().startsWith("FLAG_")) {
-                try {
-                    int value = field.getInt(null);
-                    flagValues.add(value);
-                    String binary = Integer.toBinaryString(value);
-                    flagNames.add(field.getName() + "(" + binary + ")");
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        for (int i = 0; i < flagValues.size(); i++) {
-            System.out.println(flagNames.get(i) + ": " + ((flag & flagValues.get(i)) != 0));
-        }
-    }
-
-    public void printPrivateFlagsStatus(int flag) {
-        List<Integer> flagValues = new ArrayList<>();
-        List<String> flagNames = new ArrayList<>();
-        Field[] fields = ApplicationInfo.class.getFields();
-        for (Field field : fields) {
-            if (field.getName().startsWith("PRIVATE_FLAG_")) {
-                try {
-                    int value = field.getInt(null);
-                    flagValues.add(value);
-                    String binary = Integer.toBinaryString(value);
-                    flagNames.add(field.getName() + "(" + binary + ")");
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        for (int i = 0; i < flagValues.size(); i++) {
-            System.out.println(flagNames.get(i) + ": " + ((flag & flagValues.get(i)) != 0));
-        }
     }
 
     Map<Integer, Boolean> getFlagsStatus(int flag, boolean privateFlags) {
@@ -264,6 +221,38 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
                 }
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", jsonObject.toString());
             }
+            case "pm_cmd": {
+                Runtime runtime = Runtime.getRuntime();
+                String cmd = "pm " + session.getParms().get("cmd");
+                JSONObject jsonObject = new JSONObject();
+                try {
+                    Process process = runtime.exec(cmd);
+                    BufferedReader stdInput = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                    BufferedReader stdError = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+
+                    String s;
+                    StringBuilder output = new StringBuilder();
+                    StringBuilder error = new StringBuilder();
+
+                    while ((s = stdInput.readLine()) != null) {
+                        output.append(s).append("\n");
+                    }
+
+                    while ((s = stdError.readLine()) != null) {
+                        error.append(s).append("\n");
+                    }
+                    jsonObject.put("stdout", output.toString());
+                    jsonObject.put("stderr", error.toString());
+                    L.d("Command output: " + output.toString());
+                    L.d("Command error: " + error.toString());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", jsonObject.toString());
+            }
+
         }
         return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", "{}");
     }
