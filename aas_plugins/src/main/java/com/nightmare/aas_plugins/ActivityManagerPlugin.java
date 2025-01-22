@@ -112,4 +112,9 @@ public class ActivityManagerPlugin extends AndroidAPIPlugin {
     }
 
 
+//    ActivityManager activityManager = (ActivityManager) getSystemService("activity");
+//    ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+//        activityManager.getMemoryInfo(memoryInfo);
+//        Log.d(TAG, "available memory---->>>" + (memoryInfo.availMem / 1048576) + "M");
+//        return memoryInfo.availMem / 1048576;
 }

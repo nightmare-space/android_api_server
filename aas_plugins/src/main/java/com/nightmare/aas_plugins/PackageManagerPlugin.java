@@ -310,6 +310,7 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
         List<PackageInfo> packageInfos = pm.getInstalledPackages(PackageManager.GET_UNINSTALLED_PACKAGES);
         JSONObject jsonObjectResult = new JSONObject();
         JSONArray jsonArray = new JSONArray();
+//        Build.VERSION.RELEASE;
         try {
             for (PackageInfo packageInfo : packageInfos) {
                 JSONObject appInfoJson = new JSONObject();
@@ -318,7 +319,7 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
                 }
                 int flags = packageInfo.applicationInfo.flags;
                 boolean isSystemApp = (flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-                L.d("package " + packageInfo.packageName + " isSystemApp -> " + isSystemApp);
+//                L.d("package " + packageInfo.packageName + " isSystemApp -> " + isSystemApp);
                 if (!getSystemApp && isSystemApp) {
                     continue;
                 }
@@ -361,6 +362,7 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
         }
         return jsonObjectResult.toString();
     }
+
 
 
     public String getAppActivities(String packageName) {

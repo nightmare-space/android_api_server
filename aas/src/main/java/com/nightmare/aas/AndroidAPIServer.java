@@ -52,7 +52,7 @@ public class AndroidAPIServer {
             portDirectory = "/storage/emulated/0/Android/data/com.nightmare.sula";
             L.d("Dex Server for Sula");
         }
-        L.d("Welcome!!!");
+        L.d("Welcome!!!" + Build.TYPE);
         L.d("args -> " + Arrays.toString(args));
         DdmHandleAppName.setAppName("RAS", 0);
         AndroidAPIServerHTTPD androidAPIServerHTTPD = ServerHelper.safeGetServerForShell();
@@ -68,7 +68,7 @@ public class AndroidAPIServer {
         String manufacturer = Build.MANUFACTURER;
         // 获取设备型号，例如 "Galaxy S10"
         String model = getMarketName();
-        if(model==null){
+        if (model == null) {
             model = Build.MODEL;
         }
         // 构建显示信息
@@ -85,6 +85,7 @@ public class AndroidAPIServer {
     public static String getMarketName() {
         return SystemProperties.get("ro.product.marketname");
     }
+
     /**
      * 与直接启动dex不同，从 Activity 中启动不用反射 context 上下文
      * 但是一些权限需要动态申请
