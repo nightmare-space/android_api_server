@@ -11,7 +11,10 @@ import android.window.TaskSnapshot;
 public interface IActivityTaskManager extends IInterface {
     TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution) throws RemoteException;
 
-    TaskSnapshot getTaskSnapshot(int taskId, boolean what, boolean isLowResolution) throws RemoteException;
+    /**
+     * <a href="https://cs.android.com/android/platform/superproject/+/android14-release:frameworks/base/core/java/android/app/IActivityTaskManager.aidl;drc=a49ecbe9f1ccaa2b6344df749de7701bd96a464e;l=274">...</a>
+     */
+    TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution, boolean takeSnapshotIfNeeded) throws RemoteException;
 
     TaskSnapshot takeTaskSnapshot(int taskId) throws RemoteException;
 
