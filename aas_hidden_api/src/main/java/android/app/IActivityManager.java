@@ -10,6 +10,7 @@ import android.os.RemoteException;
 
 import java.util.List;
 
+/** @noinspection UnusedReturnValue*/
 public interface IActivityManager extends IInterface {
 
     void forceStopPackage(String packageName, int userId) throws RemoteException;
