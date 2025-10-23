@@ -17,6 +17,8 @@ public class L {
     static String TAG = "applib";
     static public boolean enableTerminalLog = true;
 
+    static public boolean enableAndroidLog = false;
+
     public static void d(Object object) {
         StringBuilder sb = new StringBuilder();
         sb.append((char) 0x1b + "[38;5;42m·");
@@ -24,13 +26,24 @@ public class L {
         sb.append((char) 0x1b + "[38;5;38m");
         sb.append(object.toString());
         sb.append((char) 0x1b + "[0m");
-        Log.d(TAG, object.toString());
-        if(enableTerminalLog) {
+        if (enableAndroidLog) {
+            Log.d(TAG, object.toString());
+        }
+        if (enableTerminalLog) {
             System.out.println(sb);
             System.out.flush();
         }
-        initFileOutStream();
-        fileOut.println(sb);
+        safePrintToFile(sb.toString());
+    }
+
+    static void safePrintToFile(String str) {
+        try {
+            initFileOutStream();
+            fileOut.println(str);
+        } catch (Exception e) {
+            System.out.println("Error writing to log file: " + e.getMessage());
+            System.out.flush();
+        }
     }
 
 
@@ -41,13 +54,14 @@ public class L {
         sb.append((char) 0x1b + "[38;5;196m");
         sb.append(object.toString());
         sb.append((char) 0x1b + "[0m");
-        Log.d(TAG, object.toString());
-        if(enableTerminalLog) {
+        if (enableAndroidLog) {
+            Log.d(TAG, object.toString());
+        }
+        if (enableTerminalLog) {
             System.out.println(sb);
             System.out.flush();
         }
-        initFileOutStream();
-        fileOut.println(sb);
+        safePrintToFile(sb.toString());
     }
 
     private static void initFileOutStream() {
@@ -59,7 +73,8 @@ public class L {
                 }
                 fileOut = new PrintStream(new FileOutputStream(logFile, false));
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                System.out.println("Error creating log file: " + e.getMessage());
+                System.out.flush();
             }
         }
     }
