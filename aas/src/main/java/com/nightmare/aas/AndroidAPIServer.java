@@ -24,11 +24,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import android.os.Process;
+
 public class AndroidAPIServer {
     public AndroidAPIServer() {
     }
 
-//    private final Class<?> type;
+    //    private final Class<?> type;
 
     @SuppressLint("SdCardPath")
     static public String portDirectory = "/sdcard";
@@ -41,6 +43,25 @@ public class AndroidAPIServer {
 
     String version = "0.0.1";
 
+    public boolean switchToUid() {
+        try {
+            int currentUid = Process.myUid();
+            L.d("当前UID: " + currentUid);
+            JNIBridge.setUid(2000);
+
+            // 检查UID是否已更改
+            int afterUid = Process.myUid();
+            L.d("操作后UID: " + afterUid);
+
+        } catch (Exception e) {
+            L.d("切换UID失败: " + e.getMessage());
+            return false;
+        }
+        return true;
+    }
+
+    public AndroidAPIServerHTTPD serverHTTPD;
+
     /**
      * usually cmd is 'adb shell app_process *'
      */
@@ -48,15 +69,15 @@ public class AndroidAPIServer {
     public void startServerForShell(String[] args) {
         if (Objects.equals(args[0], "sula")) {
             // TODO: 这个多在几个安卓模拟器上测试一下
-            L.serverLogPath = "/storage/emulated/0/Android/data/com.nightmare.sula" + "/app_server_log";
-            portDirectory = "/storage/emulated/0/Android/data/com.nightmare.sula";
+            L.serverLogPath = "/storage/emulated/0/Android/data/com.nightmare.neo" + "/app_server_log";
+            portDirectory = "/storage/emulated/0/Android/data/com.nightmare.neo";
             L.d("Dex Server for Sula");
         }
         L.d("Welcome!!!" + Build.TYPE);
         L.d("args -> " + Arrays.toString(args));
-        DdmHandleAppName.setAppName("RAS", 0);
-        AndroidAPIServerHTTPD androidAPIServerHTTPD = ServerHelper.safeGetServerForShell();
-        androidAPIServerHTTPD.setAndroidAPIServer(this);
+        DdmHandleAppName.setAppName("AAS", 0);
+        serverHTTPD = ServerHelper.safeGetServerForShell();
+        serverHTTPD.setAndroidAPIServer(this);
         L.d("Sula server starting.(version: " + version + ")");
         Workarounds.apply();
         ContextStore.getInstance().setContext(FakeContext.get());
@@ -64,19 +85,33 @@ public class AndroidAPIServer {
         String sdk = Build.VERSION.SDK;
         String release = Build.VERSION.RELEASE;
         L.d("Info: Android " + release + "(" + sdk + ")");
+        int uid = Process.myUid();
+        L.d("info: uid -> " + uid);
         // 获取设备制造商，例如 "Samsung"
         String manufacturer = Build.MANUFACTURER;
         // 获取设备型号，例如 "Galaxy S10"
         String model = getMarketName();
-        if (model == null) {
+        if (model.isEmpty()) {
             model = Build.MODEL;
         }
-        // 构建显示信息
+        //        JNIBridge.main(args);
+        //        JNIBridge.test();
+        //        JNIBridge.test1();
+        // switchToUid();
+
+        String[] ps = ContextStore.getContext().getPackageManager().getPackagesForUid(2000);
+        if (ps != null) {
+            for (String p : ps) {
+                L.d("2000 uid package -> " + p);
+            }
+        } else {
+            L.d("2000 uid package is null");
+        }
+
         String deviceInfo = "Info: " + manufacturer + "(" + model + ")";
         L.d(deviceInfo);
-        L.d("success start port -> " + androidAPIServerHTTPD.getListeningPort() + ".");
-        writePort(portDirectory, androidAPIServerHTTPD.getListeningPort());
-        // 让进程等待
+        writePort(portDirectory, serverHTTPD.getListeningPort());
+        // 让进程等待,现在由调用方执行 Looper.loop();
         // 不能用 System.in.read()
         // System.in.read() 需要宿主进程由标准终端调用
         // Process.run 等方法就会出现异常
@@ -102,72 +137,11 @@ public class AndroidAPIServer {
         ContextStore.getInstance().setContext(context);
         AndroidAPIServerHTTPD server = ServerHelper.safeGetServerForActivity();
         server.setAndroidAPIServer(this);
-        // TODO 在确认下这个断言在 release 下是怎么的
-        assert server != null;
         writePort(portPath, server.getListeningPort());
         L.d("port path:" + portPath);
         L.d("success start:" + server.getListeningPort());
         return server.getListeningPort();
     }
-
-    /**
-     * @noinspection DataFlowIssue
-     */
-    @SuppressLint("PrivateApi")
-    void tryChangeDisplayConfig() {
-        L.d("bindServer invoke");
-        Class<?> clazz = null;
-        try {
-            clazz = Class.forName("android.hardware.display.DisplayManagerGlobal");
-            @SuppressLint("DiscouragedPrivateApi") java.lang.reflect.Method getInstanceMethod = clazz.getDeclaredMethod("getInstance");
-            Object dmg = getInstanceMethod.invoke(null);
-            ReflectionHelper.invokeMethod(dmg, "setRefreshRateSwitchingType", 2);
-            //getRefreshRateSwitchingType
-            int type = (int) ReflectionHelper.invokeMethod(dmg, "getRefreshRateSwitchingType");
-            L.d("RefreshRateSwitchingType -> " + type);
-            //noinspection JavaReflectionMemberAccess
-            DisplayManager displayManager = DisplayManager.class.getDeclaredConstructor(Context.class).newInstance(FakeContext.get());
-            int matchContentFrameRateUserPreference = (int) ReflectionHelper.invokeMethod(displayManager, "getMatchContentFrameRateUserPreference");
-            L.d("matchContentFrameRateUserPreference -> " + matchContentFrameRateUserPreference);
-            // getSystemPreferredDisplayMode
-            Object systemMode = ReflectionHelper.invokeMethod(dmg, "getSystemPreferredDisplayMode", 0);
-            L.d("SystemPreferredDisplayMode -> " + systemMode);
-            // same with adb shell cmd display get-user-preferred-display-mode 0
-            Object userMode = ReflectionHelper.invokeMethod(dmg, "getUserPreferredDisplayMode", 0);
-            L.d("UserPreferredDisplayMode -> " + userMode);
-            // getGlobalUserPreferredDisplayMode
-            Object globalUserMode = ReflectionHelper.invokeMethod(displayManager, "getGlobalUserPreferredDisplayMode");
-            L.d("GlobalUserPreferredDisplayMode -> " + globalUserMode);
-            ReflectionHelper.invokeMethod(dmg, "setShouldAlwaysRespectAppRequestedMode", true);
-            boolean should = (boolean) ReflectionHelper.invokeMethod(dmg, "shouldAlwaysRespectAppRequestedMode");
-            L.d("shouldAlwaysRespectAppRequestedMode -> " + should);
-            for (Display display : displayManager.getDisplays()) {
-                if (display.getDisplayId() != 0) {
-                    L.d("display -> " + display);
-                    L.d("");
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                        Display.Mode[] supportedModes = display.getSupportedModes();
-                        for (Display.Mode mode : supportedModes) {
-                            L.d("mode -> " + mode);
-                            L.d("");
-                            if (mode.getRefreshRate() > 60) {
-                                L.d("set mode -> " + mode);
-                                ReflectionHelper.invokeMethod(dmg, "setUserPreferredDisplayMode", display.getDisplayId(), mode);
-                                ReflectionHelper.invokeMethod(displayManager, "setGlobalUserPreferredDisplayMode", mode);
-                            }
-                        }
-                    }
-                }
-            }
-            ReflectionHelper.listAllObject(dmg);
-            ReflectionHelper.listAllObject(displayManager);
-
-        } catch (ClassNotFoundException | InvocationTargetException | NoSuchMethodException |
-                 IllegalAccessException | InstantiationException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
 
     /**
      * 写入端口号，方便不同进程同App，获得这个端口号
@@ -185,7 +159,7 @@ public class AndroidAPIServer {
             out.write((port + "").getBytes());
             out.close();
         } catch (IOException e) {
-            //noinspection CallToPrintStackTrace
+            // noinspection CallToPrintStackTrace
             e.printStackTrace();
         }
     }

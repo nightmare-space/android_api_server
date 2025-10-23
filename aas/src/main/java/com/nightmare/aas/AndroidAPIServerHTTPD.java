@@ -50,12 +50,14 @@ public class AndroidAPIServerHTTPD extends NanoHTTPD {
             }
             for (AndroidAPIPlugin plugin : aas.plugins) {
                 if (!plugin.route().isEmpty() && url.startsWith(plugin.route())) {
+                    // log the request
+                    L.d("request url: " + url + " param: " + session.getParms());
                     return plugin.handle(session);
                 }
             }
             return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "route not found");
         } catch (Exception e) {
-            //noinspection CallToPrintStackTrace
+            // noinspection CallToPrintStackTrace
             e.printStackTrace();
             return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", e.toString());
         }
