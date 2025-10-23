@@ -10,31 +10,35 @@ import android.os.RemoteException;
 
 import java.util.List;
 
-//import androidx.annotation.RequiresApi;
-
-
 public interface IActivityManager extends IInterface {
 
-    void forceStopPackage(String packageName, int userId)
-            throws RemoteException;
+    void forceStopPackage(String packageName, int userId) throws RemoteException;
 
     //
-    int startActivityAsUser(IApplicationThread caller, String callingPackage,
-                            Intent intent, String resolvedType, IBinder resultTo, String resultWho,
-                            int requestCode, int flags, ProfilerInfo profilerInfo,
-                            Bundle options, int userId)
-            throws RemoteException;
+    int startActivityAsUser(
+            IApplicationThread caller,
+            String callingPackage,
+            Intent intent,
+            String resolvedType,
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            int flags,
+            ProfilerInfo profilerInfo,
+            Bundle options,
+            int userId
+    ) throws RemoteException;
 
     List<ActivityManager.RunningAppProcessInfo> getRunningAppProcesses() throws RemoteException;
 
     List<ApplicationInfo> getRunningExternalApplications() throws RemoteException;
 
-    ApplicationStartInfo getHistoricalProcessStartReasons(
-            String packageName, int maxNum, int userId) throws RemoteException;
+    boolean removeTask(int taskId) throws RemoteException;
 
-    //    @RequiresApi(26)
-    abstract class Stub extends Binder implements IActivityManager {
+    ApplicationStartInfo getHistoricalProcessStartReasons(String packageName, int maxNum, int userId) throws RemoteException;
 
+
+    abstract class Stub extends Binder {
         public static IActivityManager asInterface(IBinder obj) {
             throw new RuntimeException("STUB");
         }
