@@ -26,6 +26,7 @@ public final class Workarounds {
 
     private static final Class<?> ACTIVITY_THREAD_CLASS;
     private static final Object ACTIVITY_THREAD;
+    private static final Object applicationThread;
 
     static {
         prepareMainLooper();
@@ -41,9 +42,17 @@ public final class Workarounds {
             Field sCurrentActivityThreadField = ACTIVITY_THREAD_CLASS.getDeclaredField("sCurrentActivityThread");
             sCurrentActivityThreadField.setAccessible(true);
             sCurrentActivityThreadField.set(null, ACTIVITY_THREAD);
+
+            // 获取 ActivityThread 中的 IApplicationThread
+            Method getApplicationThreadMethod = ACTIVITY_THREAD_CLASS.getDeclaredMethod("getApplicationThread");
+            getApplicationThreadMethod.setAccessible(true);
+            applicationThread = getApplicationThreadMethod.invoke(ACTIVITY_THREAD);
+            L.d("获取 IApplicationThread 成功: " + applicationThread);
+
         } catch (Exception e) {
             throw new AssertionError(e);
         }
+
     }
 
     private Workarounds() {

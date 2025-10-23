@@ -1,7 +1,8 @@
 package com.nightmare.aas.foundation;
 
-/*
-copy from shizuku
+/**
+ * copy from shizuku
+ * @param <T>
  */
 public abstract class Singleton<T> {
 

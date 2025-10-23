@@ -1,5 +1,6 @@
 package com.nightmare.aas.foundation;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.AttributionSource;
 import android.content.Context;
@@ -7,6 +8,9 @@ import android.content.ContextWrapper;
 import android.os.Build;
 import android.os.Process;
 
+/**
+ * @noinspection NullableProblems
+ */
 public final class FakeContext extends ContextWrapper {
 
     public static final String PACKAGE_NAME = "com.android.shell";
@@ -32,6 +36,7 @@ public final class FakeContext extends ContextWrapper {
         return PACKAGE_NAME;
     }
 
+    @SuppressLint("UseRequiresApi")
     @TargetApi(Build.VERSION_CODES.S)
     @Override
     public AttributionSource getAttributionSource() {
