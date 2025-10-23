@@ -9,7 +9,6 @@ public class GraphicBuffer {
         throw new RuntimeException("Stub!");
     }
 
-    // getFormat
     public int getFormat() {
         throw new RuntimeException("Stub!");
     }
