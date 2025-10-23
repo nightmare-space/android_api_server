@@ -19,13 +19,13 @@ PROJ_DIR=$(cd $LOCAL_DIR/..; pwd)
 unset ANDROID_PLATFORM
 unset ANDROID_BUILD_TOOLS
 PLATFORM=${ANDROID_PLATFORM:-35}
-BUILD_TOOLS=${ANDROID_BUILD_TOOLS:-35.0.0}
+BUILD_TOOLS=${ANDROID_BUILD_TOOLS:-35.0.1}
 BUILD_TOOLS_DIR="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
 # BUILD_DIR="$(realpath ${BUILD_DIR:-build})"
 BUILD_DIR="$LOCAL_DIR/${BUILD_DIR:-build}"
 GEN_DIR="$BUILD_DIR/gen"
 CLASSES_DIR="$BUILD_DIR/classes"
-SERVER_DIR=$(dirname "$0")
+SERVER_DIR=$PROJ_DIR/aas_hidden_api
 SERVER_BINARY=app_server
 ANDROID_JAR="$ANDROID_HOME/platforms/android-$PLATFORM/android.jar"
 LAMBDA_JAR="$BUILD_TOOLS_DIR/core-lambda-stubs.jar"
@@ -47,10 +47,9 @@ printf "%-20s %-20s\n" "GEN_DIR" "$GEN_DIR"
 mkdir -p "$CLASSES_DIR/com/nightmare/aas"
 
 color_echo "Generating java from aidl..."
-# cd "$PROJ_DIR/src/main/aidl"
-# "$BUILD_TOOLS_DIR/aidl" -p$ANDROID_HOME/platforms/android-$PLATFORM/framework.aidl -o"$GEN_DIR" com/nightmare/sula/IAdbService.aidl
-# "$BUILD_TOOLS_DIR/aidl" -p$ANDROID_HOME/platforms/android-$PLATFORM/framework.aidl -o"$GEN_DIR" com/nightmare/sula/ISurfaceService.aidl
-
+cd "$SERVER_DIR/src/main/aidl"
+# "$BUILD_TOOLS_DIR/aidl" -o"$GEN_DIR" -I. android/app/ITaskStackListener.aidl
+"$BUILD_TOOLS_DIR/aidl" -o"$GEN_DIR" -I. android/view/IRotationWatcher.aidl
 
 # cd $PROJ_DIR/src/main/java
 AAS_INTEGRATE_DIR=$PROJ_DIR/aas_integrated
@@ -75,8 +74,14 @@ HIDDEN=( \
     $HIDDEN_API_DIR/android/window/*.java \
     $HIDDEN_API_DIR/android/graphics/*.java \
     $HIDDEN_API_DIR/android/hardware/display/*.java \
+    $HIDDEN_API_DIR/android/hardware/input/*.java \
+    $HIDDEN_API_DIR/android/hardware/health/*.java \
     $HIDDEN_API_DIR/android/ddm/*.java \
+    $HIDDEN_API_DIR/android/view/*.java \
     $HIDDEN_API_DIR/androidx/annotation/*.java \
+    $HIDDEN_API_DIR/com/android/internal/os/*.java \
+    $HIDDEN_API_DIR/com/android/server/display/*.java \
+    $HIDDEN_API_DIR/com/android/server/health/*.java \
 )
 
 CLASSES=()
@@ -86,6 +91,11 @@ do
     src=$(echo $src | sed 's|.*\(com/nightmare/.*\)|\1|')
     CLASSES+=("${src%.java}.class")
 done
+CLASSES+=("com/nightmare/aas_plugins/ActivityTaskManagerPlugin\$1.class")
+CLASSES+=("com/nightmare/aas_plugins/InputManagerPlugin\$1.class")
+CLASSES+=("com/nightmare/aas_plugins/InputManagerPlugin\$2.class")
+CLASSES+=("com/nightmare/aas_plugins/InputManagerPlugin\$3.class")
+CLASSES+=("com/nightmare/aas_plugins/MouseEventParser\$MouseEvent.class")
 
 color_echo "Compiling java sources..."
 
@@ -112,6 +122,7 @@ then
         android/content/pm/*.class \
         android/os/*.class \
         android/hardware/display/*.class \
+        android/hardware/input/*.class \
         android/graphics/*.class \
         android/app/*.class \
         android/window/*.class \
@@ -137,6 +148,6 @@ else
     mv classes.zip "$SERVER_BINARY"
 fi
 
-rm -rf classes.dex classes gen
+# rm -rf classes.dex classes gen
 
 echo "App Server generated in $BUILD_DIR/$SERVER_BINARY"
