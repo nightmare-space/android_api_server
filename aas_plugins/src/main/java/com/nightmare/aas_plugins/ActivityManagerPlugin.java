@@ -2,15 +2,10 @@ package com.nightmare.aas_plugins;
 
 import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 
-import android.annotation.SuppressLint;
 import android.app.ActivityOptions;
 import android.app.IActivityManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -18,21 +13,21 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 
 import com.nightmare.aas.foundation.AndroidAPIPlugin;
-import com.nightmare.aas.ContextStore;
 import com.nightmare.aas.foundation.FakeContext;
 import com.nightmare.aas.helper.L;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-
-import java.util.ArrayList;
-import java.util.List;
 
 import fi.iki.elonen.NanoHTTPD;
 
 public class ActivityManagerPlugin extends AndroidAPIPlugin {
+    public ActivityManagerPlugin() {
+        IBinder binder = ServiceManager.getService(Context.ACTIVITY_SERVICE);
+        ams = IActivityManager.Stub.asInterface(binder);
+    }
+
+    IActivityManager ams;
 
     @Override
     public String route() {
@@ -48,7 +43,13 @@ public class ActivityManagerPlugin extends AndroidAPIPlugin {
             case "start_activity": {
                 String activity = session.getParms().get("activity");
                 String id = session.getParms().get("displayId");
-                startActivity(packageName, activity, id);
+                String userIdStr = session.getParms().get("userId");
+                int userId = -2;
+                if (userIdStr != null) {
+                    userId = Integer.parseInt(userIdStr);
+                }
+                L.d("user id -> " + userId);
+                startActivity(packageName, activity, id, userId);
                 JSONObject jsonObject = new JSONObject();
                 try {
                     jsonObject.put("result", "success");
@@ -58,12 +59,26 @@ public class ActivityManagerPlugin extends AndroidAPIPlugin {
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", jsonObject.toString());
             }
             case "stop_activity": {
-                IBinder binder = ServiceManager.getService(Context.ACTIVITY_SERVICE);
-                IActivityManager activityManagerServices = IActivityManager.Stub.asInterface(binder);
                 JSONObject jsonObject = new JSONObject();
                 try {
                     try {
-                        activityManagerServices.forceStopPackage(packageName, -2);
+                        ams.forceStopPackage(packageName, -2);
+                        jsonObject.put("result", "success");
+                    } catch (RemoteException | JSONException e) {
+                        jsonObject.put("result", "failed");
+                    }
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", jsonObject.toString());
+            }
+            case "remove_task": {
+                JSONObject jsonObject = new JSONObject();
+                // noinspection DataFlowIssue,deprecation
+                int id = Integer.parseInt(session.getParms().get("id"));
+                try {
+                    try {
+                        ams.removeTask(id);
                         jsonObject.put("result", "success");
                     } catch (RemoteException | JSONException e) {
                         jsonObject.put("result", "failed");
@@ -77,8 +92,7 @@ public class ActivityManagerPlugin extends AndroidAPIPlugin {
         return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", "{}");
     }
 
-    // TODO Sula里面的没有用过ShizkuBinderWrapper包装
-    public void startActivity(String packageName, String activity, String displayId) {
+    public void startActivity(String packageName, String activity, String displayId, int userId) {
         Intent launchIntent = new Intent();
         launchIntent.setClassName(packageName, activity);
 
@@ -88,13 +102,14 @@ public class ActivityManagerPlugin extends AndroidAPIPlugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ActivityOptions launchOptions = ActivityOptions.makeBasic();
             launchOptions.setLaunchDisplayId(Integer.parseInt(displayId));
+
             options = launchOptions.toBundle();
         }
         try {
             IBinder binder = ServiceManager.getService(Context.ACTIVITY_SERVICE);
             IActivityManager activityManagerServices = IActivityManager.Stub.asInterface(binder);
             activityManagerServices.startActivityAsUser(
-                    /* caller */ null,
+                    /* caller */null,
                     /* callingPackage */ FakeContext.PACKAGE_NAME,
                     /* intent */ launchIntent,
                     /* resolvedType */ null,
@@ -104,17 +119,10 @@ public class ActivityManagerPlugin extends AndroidAPIPlugin {
                     /* startFlags */ 0,
                     /* profilerInfo */ null,
                     /* bOptions */ options,
-                    /* userId */ /* UserHandle.USER_CURRENT */ -2
+                    /* userId */ /* UserHandle.USER_CURRENT */ userId
             );
         } catch (RemoteException e) {
             throw new RuntimeException(e);
         }
     }
-
-
-//    ActivityManager activityManager = (ActivityManager) getSystemService("activity");
-//    ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-//        activityManager.getMemoryInfo(memoryInfo);
-//        Log.d(TAG, "available memory---->>>" + (memoryInfo.availMem / 1048576) + "M");
-//        return memoryInfo.availMem / 1048576;
 }
