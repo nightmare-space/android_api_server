@@ -1,4 +1,4 @@
-package com.nightmare.aas_plugins.util;
+package com.nightmare.aas_plugins.helper;
 
 import android.graphics.Bitmap;
 
