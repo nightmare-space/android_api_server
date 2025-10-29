@@ -25,6 +25,9 @@ import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
 
+/**
+ * @noinspection ALL
+ */
 public class FilePlugin extends AndroidAPIPlugin {
 
     @Override
@@ -50,6 +53,8 @@ public class FilePlugin extends AndroidAPIPlugin {
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", result.toString());
             case "dir":
                 return handleDir(session.getParms());
+            case "file":
+                return handleFileBytes(session.getParms(), session);
             case "delete":
                 return handleDelete(session.getParms());
             case "rename":
@@ -58,10 +63,28 @@ public class FilePlugin extends AndroidAPIPlugin {
                 return handleToken();
             case "upload":
                 return handleFileUpload(session);
-            case "file":
-                return handleFileBytes(session.getParms(), session);
+            case "md5":
+                return handleMD5(session);
             default:
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Invalid action parameter");
+        }
+    }
+
+    private NanoHTTPD.Response handleMD5(NanoHTTPD.IHTTPSession session) {
+        String path = session.getParms().get("path");
+        if (path == null) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Missing parameters");
+        }
+        File file = new File(path);
+        if (!file.exists() || !file.isFile()) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, "text/plain", "File not found");
+        }
+        try {
+            String md5 = PackageManagerPlugin.calculateHash(file, "MD5");
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", md5);
+        } catch (Exception e) {
+            L.e("MD5Handler Exception: " + e);
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, "text/plain", "Error getting MD5");
         }
     }
 
@@ -133,7 +156,7 @@ public class FilePlugin extends AndroidAPIPlugin {
                 e.printStackTrace();
             }
             response.addHeader("Accept-Ranges", "bytes");
-//            response.addHeader("Content-Length", String.valueOf(contentLength));
+            //            response.addHeader("Content-Length", String.valueOf(contentLength));
             return response;
         } else {
             try {
@@ -142,14 +165,14 @@ public class FilePlugin extends AndroidAPIPlugin {
                     status = NanoHTTPD.Response.Status.PARTIAL_CONTENT;
                 }
                 InputStream fileInputStream = new FileInputStream(file);
-                //noinspection ResultOfMethodCallIgnored
+                // noinspection ResultOfMethodCallIgnored
                 fileInputStream.skip(start);
                 NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(status, mimeType, fileInputStream, contentLength);
                 response.addHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileLength);
                 response.addHeader("Accept-Ranges", "bytes");
                 L.d("Content-Range -> " + "bytes " + start + "-" + end + "/" + fileLength);
                 L.d("Content-Length -> " + contentLength);
-//                response.addHeader("Content-Disposition", "attachment; filename=\"" + file.getName() + "\"");
+                //                response.addHeader("Content-Disposition", "attachment; filename=\"" + file.getName() + "\"");
                 response = addCORSHeaders(response);
                 return response;
             } catch (IOException e) {
@@ -178,11 +201,13 @@ public class FilePlugin extends AndroidAPIPlugin {
 
     private NanoHTTPD.Response handleDelete(Map<String, String> params) {
         String path = params.get("path");
+        L.d("handleDelete path -> " + path);
         if (path == null) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Missing parameters");
         }
         File file = new File(path);
         if (file.exists()) {
+            L.d("file exists");
             if (file.delete()) {
                 // File deleted successfully
             } else {
