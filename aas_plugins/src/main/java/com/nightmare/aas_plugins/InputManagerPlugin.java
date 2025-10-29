@@ -507,16 +507,17 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
             }
             case "get_input_devices":
                 // reflect get IInputManager
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    Object overlay = null;
-                    overlay = ContextStore.getContext().getSystemService("overlay");
-                    Context c = ReflectionHelper.getHiddenField(overlay, "mContext");
-                    L.d("Overlay Context: " + c.getPackageName());
-                    // ReflectionHelper.listAllObject(overlay);
-
-                    // ReflectionHelper.listAllObject(imsClass);
-                    // 构造 InputManagerService 实例
-                }
+                // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                //     Object overlay = null;
+                //     overlay = ContextStore.getContext().getSystemService("overlay");
+                //     // Context c = ReflectionHelper.getHiddenField(overlay, "mContext");
+                //     L.d("Overlay Context: " + overlay);
+                //     RH.l(overlay);
+                //     // ReflectionHelper.listAllObject(overlay);
+                //
+                //     // ReflectionHelper.listAllObject(imsClass);
+                //     // 构造 InputManagerService 实例
+                // }
                 // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 //     InputManager im = ContextStore.getContext().getSystemService(InputManager.class);
                 //     ReflectionHelper.listAllObject(im);
