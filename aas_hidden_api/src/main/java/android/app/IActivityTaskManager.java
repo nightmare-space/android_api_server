@@ -16,8 +16,7 @@ public interface IActivityTaskManager extends IInterface {
      */
     TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution, boolean takeSnapshotIfNeeded) throws RemoteException;
 
-    ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(
-            int maxNum, int flags, int userId) throws RemoteException;
+    ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(int maxNum, int flags, int userId) throws RemoteException;
 
     TaskSnapshot takeTaskSnapshot(int taskId) throws RemoteException;
 
