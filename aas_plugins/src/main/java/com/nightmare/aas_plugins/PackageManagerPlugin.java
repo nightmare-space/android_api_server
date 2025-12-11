@@ -3,6 +3,8 @@ package com.nightmare.aas_plugins;
 import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 
 import android.annotation.SuppressLint;
+import android.app.ActivityManagerNative;
+import android.app.ActivityThread;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -14,16 +16,20 @@ import android.content.pm.Signature;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.UserManager;
 
 import com.nightmare.aas.foundation.AndroidAPIPlugin;
 import com.nightmare.aas.ContextStore;
 import com.nightmare.aas.helper.L;
-import com.nightmare.aas_plugins.util.BitmapHelper;
+import com.nightmare.aas.helper.RH;
+import com.nightmare.aas.helper.ReflectionHelper;
+import com.nightmare.aas_plugins.helper.BitmapHelper;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -34,21 +40,26 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipFile;
 
 import fi.iki.elonen.NanoHTTPD;
 
 public class PackageManagerPlugin extends AndroidAPIPlugin {
     public PackageManagerPlugin() {
     }
+
+    PackageManager pm = ContextStore.getContext().getPackageManager();
 
     public static String calculateHash(File file, String algorithm) {
         try (FileInputStream fis = new FileInputStream(file)) {
@@ -103,7 +114,7 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
     }
 
     Map<Integer, Boolean> getFlagsStatus(int flag, boolean privateFlags) {
-        String prefix = null;
+        String prefix;
         if (privateFlags) {
             prefix = "PRIVATE_FLAG_";
         } else {
@@ -197,7 +208,8 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
                         packageName = result;
                     }
                     L.d("package -> " + packageName);
-                    bytes = BitmapHelper.bitmap2Bytes(getBitmap(packageName));
+                    Bitmap bitmap = getBitmap(packageName, false);
+                    bytes = BitmapHelper.bitmap2Bytes(bitmap);
                 }
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "image/png", new ByteArrayInputStream(bytes), bytes.length);
             case "get_app_activities": {
@@ -265,7 +277,6 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
      */
     public String getAppMainActivity(String packageName) {
         StringBuilder builder = new StringBuilder();
-        PackageManager pm = ContextStore.getContext().getPackageManager();
         Intent launchIntent = pm.getLaunchIntentForPackage(packageName);
         if (launchIntent != null) {
             builder.append(launchIntent.getComponent().getClassName());
@@ -273,89 +284,73 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
             L.d(packageName + "获取启动Activity失败");
         }
         return builder.toString();
-//        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-//        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-//        List<ResolveInfo> appList = pm.queryIntentActivities(mainIntent, null, 0, 0);
-//        for (int i = 0; i < appList.size(); i++) {
-//            ResolveInfo resolveInfo = appList.get(i);
-//            String packageStr = resolveInfo.activityInfo.packageName;
-//            if (packageStr.equals(packageName)) {
-//                builder.append(resolveInfo.activityInfo.name).append("\n");
-//                break;
-//            }
-//        }
-//        return builder.toString();
+        //        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+        //        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        //        List<ResolveInfo> appList = pm.queryIntentActivities(mainIntent, null, 0, 0);
+        //        for (int i = 0; i < appList.size(); i++) {
+        //            ResolveInfo resolveInfo = appList.get(i);
+        //            String packageStr = resolveInfo.activityInfo.packageName;
+        //            if (packageStr.equals(packageName)) {
+        //                builder.append(resolveInfo.activityInfo.name).append("\n");
+        //                break;
+        //            }
+        //        }
+        //        return builder.toString();
     }
 
     public static String getLabel(ApplicationInfo info) {
         PackageManager pm = ContextStore.getContext().getPackageManager();
         return (String) info.loadLabel(pm);
         // TODO(lin) 下面是个啥
-//        int res = info.labelRes;
-//        if (info.nonLocalizedLabel != null) {
-//            return (String) info.nonLocalizedLabel;
-//        }
-//        if (res != 0) {
-//            AssetManager assetManager = getAssetManagerFromPath(info.sourceDir);
-//            Resources resources = new Resources(assetManager, displayMetrics, configuration);
-//            return (String) resources.getText(res);
-//        }
-//        return null;
+        //        int res = info.labelRes;
+        //        if (info.nonLocalizedLabel != null) {
+        //            return (String) info.nonLocalizedLabel;
+        //        }
+        //        if (res != 0) {
+        //            AssetManager assetManager = getAssetManagerFromPath(info.sourceDir);
+        //            Resources resources = new Resources(assetManager, displayMetrics, configuration);
+        //            return (String) resources.getText(res);
+        //        }
+        //        return null;
     }
 
 
     public String getAllAppInfo(boolean getSystemApp) {
-        PackageManager pm = ContextStore.getContext().getPackageManager();
-        @SuppressLint("QueryPermissionsNeeded")
-        List<PackageInfo> packageInfos = pm.getInstalledPackages(PackageManager.GET_UNINSTALLED_PACKAGES);
         JSONObject jsonObjectResult = new JSONObject();
         JSONArray jsonArray = new JSONArray();
-//        Build.VERSION.RELEASE;
         try {
-            for (PackageInfo packageInfo : packageInfos) {
-                JSONObject appInfoJson = new JSONObject();
-                if (packageInfo == null) {
-                    continue;
+            // 获取当前用户的应用
+            @SuppressLint("QueryPermissionsNeeded")
+            List<PackageInfo> packageInfos = pm.getInstalledPackages(PackageManager.GET_UNINSTALLED_PACKAGES);
+            processPackageInfos(packageInfos, jsonArray, getSystemApp);
+
+            // 获取所有用户ID
+            int[] userIds = getUserIds();
+            if (userIds != null) {
+                for (int userId : userIds) {
+                    L.d("Processing user ID: " + userId + "current user id -> " + android.os.Process.myUserHandle().hashCode());
+                    // 跳过当前用户，因为已经处理过了
+                    if (userId == android.os.Process.myUserHandle().hashCode()) {
+                        continue;
+                    }
+
+                    // 使用反射调用getInstalledPackagesAsUser
+                    try {
+                        Method method = PackageManager.class.getMethod("getInstalledPackagesAsUser",
+                                int.class, int.class);
+                        List<PackageInfo> userPackages = (List<PackageInfo>) method.invoke(pm,
+                                PackageManager.GET_UNINSTALLED_PACKAGES, userId);
+                        // log userPackages length
+                        L.d("User " + userId + " installed packages count: " + (userPackages != null ? userPackages.size() : 0));
+                        if (userPackages != null) {
+                            processPackageInfos(userPackages, jsonArray, getSystemApp);
+                        }
+                    } catch (Exception e) {
+                        L.e("获取用户 " + userId + " 的应用列表失败: " + e.getMessage());
+                    }
                 }
-                int flags = packageInfo.applicationInfo.flags;
-                boolean isSystemApp = (flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-//                L.d("package " + packageInfo.packageName + " isSystemApp -> " + isSystemApp);
-                if (!getSystemApp && isSystemApp) {
-                    continue;
-                }
-                if (getSystemApp && !isSystemApp) {
-                    continue;
-                }
-                ApplicationInfo applicationInfo = packageInfo.applicationInfo;
-                appInfoJson.put("package", applicationInfo.packageName);
-                appInfoJson.put("label", getLabel(applicationInfo));
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    appInfoJson.put("minSdk", packageInfo.applicationInfo.minSdkVersion);
-                } else {
-                    appInfoJson.put("minSdk", 0);
-                }
-                appInfoJson.put("targetSdk", applicationInfo.targetSdkVersion);
-                appInfoJson.put("versionName", packageInfo.versionName);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    appInfoJson.put("versionCode", packageInfo.getLongVersionCode());
-                } else {
-                    appInfoJson.put("versionCode", packageInfo.versionCode);
-                }
-                appInfoJson.put("enabled", applicationInfo.enabled);
-                boolean isSuspend = false;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    isSuspend = (flags & ApplicationInfo.FLAG_SUSPENDED) != 0;
-                }
-                appInfoJson.put("is_suspend", isSuspend);
-                boolean isUninstall = (flags & ApplicationInfo.FLAG_INSTALLED) != 0;
-                appInfoJson.put("is_install", isUninstall);
-                // TODO 判断 Apk 是否隐藏需要重新实现
-//                PackageInfo withoutHidePackage = PackageManagerPlugin.getPackageInfo(packageInfo.packageName, PackageManager.GET_DISABLED_COMPONENTS);
-                appInfoJson.put("hide", false);
-                appInfoJson.put("uid", applicationInfo.uid);
-                appInfoJson.put("sourceDir", applicationInfo.sourceDir);
-                jsonArray.put(appInfoJson);
             }
+
             jsonObjectResult.put("datas", jsonArray);
         } catch (JSONException e) {
             throw new RuntimeException(e);
@@ -363,12 +358,105 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
         return jsonObjectResult.toString();
     }
 
+    private void processPackageInfos(List<PackageInfo> packageInfos, JSONArray jsonArray, boolean getSystemApp) throws JSONException {
+        for (PackageInfo packageInfo : packageInfos) {
+            if (packageInfo == null || packageInfo.applicationInfo == null) {
+                continue;
+            }
 
+            int flags = packageInfo.applicationInfo.flags;
+            boolean isSystemApp = (flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+            boolean isInstalled = (flags & ApplicationInfo.FLAG_INSTALLED) != 0;
+
+            if (!getSystemApp && isSystemApp) {
+                continue;
+            }
+            if (getSystemApp && !isSystemApp) {
+                continue;
+            }
+
+            ApplicationInfo applicationInfo = packageInfo.applicationInfo;
+
+            // 获取应用的用户ID
+            int userId = 0;
+            try {
+                userId = getUserIdForPackage(applicationInfo);
+            } catch (Exception e) {
+                L.e("获取应用用户ID失败: " + e.getMessage());
+            }
+
+            // 过滤条件：用户ID为0的应用保留；非0用户ID的应用必须是已安装的才保留
+            if (userId != 0 && !isInstalled) {
+                // L.d("跳过用户 " + userId + " 下未安装的应用: " + applicationInfo.packageName);
+                continue;
+            }
+
+            JSONObject appInfoJson = new JSONObject();
+            appInfoJson.put("package", applicationInfo.packageName);
+            appInfoJson.put("label", getLabel(applicationInfo));
+            appInfoJson.put("userId", userId);
+
+            // 其他代码保持不变...
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                appInfoJson.put("minSdk", packageInfo.applicationInfo.minSdkVersion);
+            } else {
+                appInfoJson.put("minSdk", 0);
+            }
+            appInfoJson.put("targetSdk", applicationInfo.targetSdkVersion);
+            appInfoJson.put("versionName", packageInfo.versionName);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                appInfoJson.put("versionCode", packageInfo.getLongVersionCode());
+            } else {
+                appInfoJson.put("versionCode", packageInfo.versionCode);
+            }
+            appInfoJson.put("enabled", applicationInfo.enabled);
+            boolean isSuspend = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                isSuspend = (flags & ApplicationInfo.FLAG_SUSPENDED) != 0;
+            }
+            appInfoJson.put("is_suspend", isSuspend);
+            appInfoJson.put("is_install", isInstalled);
+            appInfoJson.put("hide", false);
+            appInfoJson.put("uid", applicationInfo.uid);
+            appInfoJson.put("sourceDir", applicationInfo.sourceDir);
+
+            jsonArray.put(appInfoJson);
+        }
+    }
+
+    // 获取所有用户ID
+    private int[] getUserIds() {
+        UserManager um = (UserManager) ContextStore.getContext().getSystemService(Context.USER_SERVICE);
+        try {
+
+            Method getUsersMethod = um.getClass().getMethod("getUsers");
+            List<?> users = (List<?>) getUsersMethod.invoke(um);
+            L.d("users -> " + users);
+
+            if (users != null) {
+                int[] userIds = new int[users.size()];
+                for (int i = 0; i < users.size(); i++) {
+                    Object user = users.get(i);
+                    userIds[i] = RH.gF(user, "id");
+                }
+                return userIds;
+            }
+        } catch (Exception e) {
+            L.e("获取用户列表失败: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // 获取应用所属的用户ID
+    private int getUserIdForPackage(ApplicationInfo applicationInfo) throws Exception {
+        int uid = applicationInfo.uid;
+        // 用户ID存储在UID的高位
+        return uid / 100000;
+    }
 
     public String getAppActivities(String packageName) {
-        PackageManager packageManager = ContextStore.getContext().getPackageManager();
         try {
-            PackageInfo packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES);
+            PackageInfo packageInfo = pm.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES);
             ActivityInfo[] activities = packageInfo.activities;
             if (activities == null) {
                 return "[]";
@@ -430,7 +518,7 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
         try {
             PackageInfo packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS);
             String[] permissions = packageInfo.requestedPermissions;
-//            L.d("permissions: " + permissions);
+            //            L.d("permissions: " + permissions);
             if (permissions == null) {
                 return "[]";
             }
@@ -442,7 +530,7 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
                 object.put("name", permission);
                 try {
                     PermissionInfo permissionInfo = packageManager.getPermissionInfo(permission, 0);
-//                    L.d("permissionInfo: " + permissionInfo);
+                    //                    L.d("permissionInfo: " + permissionInfo);
                     if (permissionInfo != null) {
                         CharSequence description = permissionInfo.loadDescription(packageManager);
                         if (description != null) {
@@ -478,13 +566,8 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
         return getPackageInfo(packageName, PackageManager.GET_UNINSTALLED_PACKAGES);
     }
 
-    public Bitmap getBitmap(String packageName) {
-        return getBitmap(packageName, false);
-    }
 
-
-    public byte[] getApkBitmapBytes(String path) throws
-            InvocationTargetException, IllegalAccessException {
+    public byte[] getApkBitmapBytes(String path) throws InvocationTargetException, IllegalAccessException {
         return BitmapHelper.bitmap2Bytes(getUninstallAPKIcon(path));
     }
 
@@ -523,57 +606,188 @@ public class PackageManagerPlugin extends AndroidAPIPlugin {
             L.d("applicationInfo is null");
             return null;
         }
+        // this way will crash on meizu 21
+        // 而且很奇怪，icon 在 crash 的时候，并不为 null，所以还不能直接通过异常处理的方式来切换方案
+        // 所以先用之前的方案
+        // java.lang.NullPointerException: Attempt to invoke virtual method 'boolean java.lang.String.equals(java.lang.Object)' on a null object reference
+        //        at android.content.res.flymetheme.FlymeThemeHelper.makeThemeIcon(FlymeThemeHelper.java:837)
+        //        at android.content.res.flymetheme.FlymeThemeHelper.makeThemeIcon(FlymeThemeHelper.java:810)
+        //        at android.app.ApplicationPackageManager$Injector.makeThemeIcon(ApplicationPackageManager.java:4035)
+        //        at android.app.ApplicationPackageManager.getDrawable(ApplicationPackageManager.java:1817)
+        //        at android.app.ApplicationPackageManager.loadUnbadgedItemIcon(ApplicationPackageManager.java:3397)
+        //        at android.app.ApplicationPackageManager.loadItemIcon(ApplicationPackageManager.java:3376)
+        //        at android.content.pm.PackageItemInfo.loadIcon(PackageItemInfo.java:273)
+        //        at com.nightmare.aas_plugins.IconHandler.getBitmap(IconHandler.java:107)
+        //        at com.nightmare.aas_plugins.IconHandler.getBitmap(IconHandler.java:83)
+        //        at com.nightmare.aas_plugins.IconHandler.handle(IconHandler.java:59)
+        //        at com.nightmare.applib.AppServer.serve(AppServer.java:388)
+        //        at fi.iki.elonen.NanoHTTPD$HTTPSession.execute(NanoHTTPD.java:945)
+        //        at fi.iki.elonen.NanoHTTPD$ClientHandler.run(NanoHTTPD.java:192)
+        //        at java.lang.Thread.run(Thread.java:1012)
+        //            icon = applicationInfo.loadIcon(FakeContext.get().getPackageManager());
+        //            L.e("applicationInfo.loadIcon failed for " + packageName + " use the second way");
         try {
-            // this way will crash on meizu 21
-            // 而且很奇怪，icon 在 crash 的时候，并不为 null，所以还不能直接通过异常处理的方式来切换方案
-            // 所以先用之前的方案
-            // java.lang.NullPointerException: Attempt to invoke virtual method 'boolean java.lang.String.equals(java.lang.Object)' on a null object reference
-            //        at android.content.res.flymetheme.FlymeThemeHelper.makeThemeIcon(FlymeThemeHelper.java:837)
-            //        at android.content.res.flymetheme.FlymeThemeHelper.makeThemeIcon(FlymeThemeHelper.java:810)
-            //        at android.app.ApplicationPackageManager$Injector.makeThemeIcon(ApplicationPackageManager.java:4035)
-            //        at android.app.ApplicationPackageManager.getDrawable(ApplicationPackageManager.java:1817)
-            //        at android.app.ApplicationPackageManager.loadUnbadgedItemIcon(ApplicationPackageManager.java:3397)
-            //        at android.app.ApplicationPackageManager.loadItemIcon(ApplicationPackageManager.java:3376)
-            //        at android.content.pm.PackageItemInfo.loadIcon(PackageItemInfo.java:273)
-            //        at com.nightmare.aas_plugins.IconHandler.getBitmap(IconHandler.java:107)
-            //        at com.nightmare.aas_plugins.IconHandler.getBitmap(IconHandler.java:83)
-            //        at com.nightmare.aas_plugins.IconHandler.handle(IconHandler.java:59)
-            //        at com.nightmare.applib.AppServer.serve(AppServer.java:388)
-            //        at fi.iki.elonen.NanoHTTPD$HTTPSession.execute(NanoHTTPD.java:945)
-            //        at fi.iki.elonen.NanoHTTPD$ClientHandler.run(NanoHTTPD.java:192)
-            //        at java.lang.Thread.run(Thread.java:1012)
-//            icon = applicationInfo.loadIcon(FakeContext.get().getPackageManager());
-//            L.e("applicationInfo.loadIcon failed for " + packageName + " use the second way");
+            // 如果获取失败，尝试从资源中加载
             AssetManager assetManager = AssetManager.class.newInstance();
-            //noinspection JavaReflectionMemberAccess
-            assetManager.getClass().getMethod("addAssetPath", String.class).invoke(assetManager, applicationInfo.sourceDir);
-            Resources resources = new Resources(assetManager, null, null);
+            ReflectionHelper.invokeMethod(assetManager, "addAssetPath", applicationInfo.sourceDir);
+            // 后面两个不能传 null，不然金铲铲这类获取不到图标
+            Resources resources = new Resources(
+                    assetManager,
+                    ContextStore.getContext().getResources().getDisplayMetrics(),
+                    ContextStore.getContext().getResources().getConfiguration()
+            );
             icon = resources.getDrawable(applicationInfo.icon, null);
             if (icon == null) {
                 return null;
             }
+            // 将 Drawable 转换为 Bitmap
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && icon instanceof AdaptiveIconDrawable) {
                 Bitmap bitmap = Bitmap.createBitmap(icon.getIntrinsicWidth(), icon.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
                 Canvas canvas = new Canvas(bitmap);
                 icon.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
                 icon.draw(canvas);
                 return bitmap;
-            } else {
-                int w = icon.getIntrinsicWidth();
-                int h = icon.getIntrinsicHeight();
-                Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                Canvas canvas = new Canvas(bitmap);
-                //设置画布的范围
-                icon.setBounds(0, 0, w, h);
-                icon.draw(canvas);
-                return bitmap;
+            } else if (icon instanceof BitmapDrawable) {
+                return ((BitmapDrawable) icon).getBitmap();
             }
-        } catch (Throwable t) {
-            L.e("IconHandler getBitmap Exception:" + t);
+        } catch (Exception e) {
+            L.e("getBitmap Exception: " + e);
+        }
+        return null;
+    }
+
+
+    public Bitmap getBitmap(String packageName) {
+        try {
+            PackageInfo packageInfo = getPackageInfo(packageName);
+            if (packageInfo == null || packageInfo.applicationInfo == null) {
+                L.d(packageName + " packageInfo or applicationInfo is null");
+                return null;
+            }
+
+            ApplicationInfo applicationInfo = packageInfo.applicationInfo;
+            Drawable icon = null;
+
+            // 方法2: 尝试从资源文件加载图标
+            try {
+                // 先尝试从公共源目录加载
+                String resourcePath = applicationInfo.publicSourceDir != null ?
+                        applicationInfo.publicSourceDir : applicationInfo.sourceDir;
+
+                L.d("publicSourceDir -> " + applicationInfo.publicSourceDir);
+                L.d("sourceDir -> " + applicationInfo.sourceDir);
+
+                AssetManager assetManager = AssetManager.class.newInstance();
+                RH.iM(assetManager, "addAssetPath", applicationInfo.sourceDir);
+                Resources resources = new Resources(assetManager,
+                        ContextStore.getContext().getResources().getDisplayMetrics(),
+                        ContextStore.getContext().getResources().getConfiguration());
+
+                if (applicationInfo.icon != 0) {
+                    icon = resources.getDrawable(applicationInfo.icon, null);
+                    if (icon != null) {
+                        L.d("获取图标成功: 使用resources.getDrawable从" + resourcePath);
+                        return drawableToBitmap(icon);
+                    }
+                }
+
+                // 如果资源ID为0或加载失败，尝试加载默认图标
+                icon = resources.getDrawable(android.R.drawable.sym_def_app_icon, null);
+                if (icon != null) {
+                    L.d("获取默认图标成功");
+                    return drawableToBitmap(icon);
+                }
+            } catch (Exception e) {
+                L.e("通过resources.getDrawable获取图标失败: " + e.getMessage());
+            }
+
+            // 方法3: 对于Unity应用，尝试查找特殊路径下的图标
+            try {
+                // 检查是否是Unity应用 (可以通过特征检测)
+                if (isUnityApp(applicationInfo)) {
+                    // 尝试从Unity特定路径加载图标
+                    String[] possiblePaths = {
+                            "assets/bin/Data/splash.png",
+                            "assets/icon.png",
+                            "res/drawable/app_icon.png",
+                            "res/mipmap/app_icon.png"
+                    };
+
+                    for (String path : possiblePaths) {
+                        try {
+                            AssetManager am = getAssetManagerFromPath(applicationInfo.sourceDir);
+                            InputStream is = am.open(path);
+                            Bitmap bitmap = BitmapFactory.decodeStream(is);
+                            is.close();
+                            if (bitmap != null) {
+                                L.d("从Unity特定路径加载图标成功: " + path);
+                                return bitmap;
+                            }
+                        } catch (Exception ignored) {
+                            // 忽略单个路径的错误，继续尝试下一个
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                L.e("尝试加载Unity特定图标失败: " + e.getMessage());
+            }
+
+            L.e("无法获取应用图标: " + packageName);
+            return null;
+        } catch (Exception e) {
+            L.e("getBitmap总体异常: " + e.getMessage());
             return null;
         }
     }
 
+    // 辅助方法：判断是否为Unity应用
+    private boolean isUnityApp(ApplicationInfo appInfo) {
+        try {
+            // 检查是否包含Unity特征文件或目录
+            String[] unityMarkers = {
+                    "assets/bin/Data",
+                    "lib/libunity.so",
+                    "assets/bin/Data/Managed/UnityEngine.dll"
+            };
+
+            for (String marker : unityMarkers) {
+                File file = new File(appInfo.sourceDir);
+                if (file.exists()) {
+                    ZipFile zipFile = new ZipFile(file);
+                    if (zipFile.getEntry(marker) != null) {
+                        zipFile.close();
+                        return true;
+                    }
+                    zipFile.close();
+                }
+            }
+        } catch (Exception ignored) {
+            // 忽略检测错误
+        }
+        return false;
+    }
+
+    // 辅助方法：Drawable转Bitmap
+    private Bitmap drawableToBitmap(Drawable drawable) {
+        if (drawable == null) return null;
+
+        if (drawable instanceof BitmapDrawable) {
+            return ((BitmapDrawable) drawable).getBitmap();
+        }
+
+        int width = drawable.getIntrinsicWidth();
+        int height = drawable.getIntrinsicHeight();
+
+        // 确保宽高有效
+        width = width > 0 ? width : 256;
+        height = height > 0 ? height : 256;
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
+    }
 
     public static Drawable getApkIcon(Context context, String apkPath) {
         PackageManager packageManager = context.getPackageManager();

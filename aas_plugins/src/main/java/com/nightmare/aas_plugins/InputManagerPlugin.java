@@ -9,33 +9,32 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.display.DisplayManager;
-import android.hardware.health.HealthInfo;
 import android.hardware.input.InputManager;
 import android.hardware.input.InputManagerGlobal;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Looper;
 import android.os.ServiceManager;
+import android.os.SystemClock;
 import android.system.Os;
 import android.util.ArrayMap;
-import android.util.Log;
 import android.view.Display;
 import android.view.IWindowManager;
+import android.view.InputChannel;
 import android.view.InputDevice;
+import android.view.InputEvent;
+import android.view.InputEventReceiver;
 import android.view.MotionEvent;
-import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
-import android.widget.TextView;
 
-import com.android.internal.os.ClassLoaderFactory;
-import com.android.server.health.HealthInfoCallback;
 import com.nightmare.aas.ContextStore;
 import com.nightmare.aas.foundation.AndroidAPIPlugin;
 import com.nightmare.aas.foundation.FakeContext;
 import com.nightmare.aas.helper.L;
 import com.nightmare.aas.helper.RH;
 import com.nightmare.aas.helper.ReflectionHelper;
+import com.nightmare.aas.helper.ReflectionPrinter;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -44,13 +43,11 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.sql.Ref;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -60,55 +57,101 @@ import java.util.regex.Pattern;
 import fi.iki.elonen.NanoHTTPD;
 
 public class InputManagerPlugin extends AndroidAPIPlugin {
-    /**
-     * @noinspection JavaReflectionMemberAccess
-     */
     @SuppressLint("WrongConstant")
     public InputManagerPlugin() {
+        // get current uid
+        int uid = android.os.Process.myUid();
+        if (uid != android.os.Process.SHELL_UID && uid != android.os.Process.ROOT_UID) return;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             im = ContextStore.getContext().getSystemService(InputManager.class);
-            // reflect get mIm
-            Object mim = ReflectionHelper.getHiddenField(im, "mIm");
-            // ReflectionHelper.listAllObject(im);
-            // ReflectionHelper.listAllObject(mim);
-            InputManagerGlobal img = InputManagerGlobal.getInstance();
-            WindowManager wm = (WindowManager) ContextStore.getContext().getSystemService(Context.WINDOW_SERVICE);
-            // WindowManager 没有暴露 getDisplayImePolicy、setDisplayImePolicy
-            // 反射调用也比较麻烦
-            // ReflectionHelper.listAllObject(wm);
-            WindowManagerGlobal wmg = WindowManagerGlobal.getInstance();
-            IWindowManager iwm = WindowManagerGlobal.getWindowManagerService();
-            // int current = iwm.getDisplayImePolicy(10);
-            // iwm.setDisplayImePolicy(Display.DEFAULT_DISPLAY,0);
-            // iwm.setDisplayImePolicy(10,1);
-            // iwm.setDisplayImePolicy(14,1);
-            // L.d("Current Display IME Policy for display 10: " + current);
-            // ReflectionHelper.listAllObject(iwm);
-            DisplayManager dm = (DisplayManager) ContextStore.getContext().getSystemService(Context.DISPLAY_SERVICE);
-            Display[] displays = dm.getDisplays();
-            for (Display display : displays) {
-                int policy = iwm.getDisplayImePolicy(display.getDisplayId());
-                L.d("Display " + display.getDisplayId() + " (" + display.getName() + ") IME Policy: " + policy);
+            L.d("InputManager: " + im);
+            try {
+                Object mIm = RH.gF(im, "mIm");
+                // ReflectionPrinter.listAllObject(mIm);
+            } catch (NoSuchFieldException e) {
+                throw new RuntimeException(e);
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
             }
-            // test();
-            BatteryManager bm = (BatteryManager) ContextStore.getContext().getSystemService(Context.BATTERY_SERVICE);
-            int currentNow = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
-            float currentNowMa = Math.abs(currentNow) / 1000.0f; // 转换为毫安
-            L.d("当前电流: " + currentNowMa + " mA");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                IWindowManager iwm = WindowManagerGlobal.getWindowManagerService();
+                DisplayManager dm = (DisplayManager) ContextStore.getContext().getSystemService(Context.DISPLAY_SERVICE);
+                Display[] displays = dm.getDisplays();
+                for (Display display : displays) {
+                    // TODO 下面这个在安卓12崩溃
+                    int policy = iwm.getDisplayImePolicy(display.getDisplayId());
+                    L.d("Display " + display.getDisplayId() + " (" + display.getName() + ") IME Policy: " + policy);
+                }
+            }
+            getBatteryInfo();
+            // InputChannel[] channels = InputChannel.openInputChannelPair("mouse_listener");
+            // // InputManager.getInstance().registerInputChannel(channels[0], null);
+            //
+            // InputEventReceiver receiver = new InputEventReceiver(channels[1], Looper.getMainLooper()) {
+            //     @Override
+            //     public void onInputEvent(InputEvent event) {
+            //         L.d("Input Event: " + event);
+            //         // if (event instanceof MotionEvent) {
+            //         //     MotionEvent me = (MotionEvent) event;
+            //         //     L.d("rawX=" + me.getRawX() + " rawY=" + me.getRawY());
+            //         // }
+            //         finishInputEvent(event, true);
+            //     }
+            // };
 
-            int voltage = getBatteryVoltageFromCmd();
-            L.d("当前电压 (from cmd): " + voltage + " mV");
+            // JNIBridge.nativeClose();        // 销毁虚拟设备
+            // TODO 直接往鼠标写入绝对事件是不是就可以移动到指定的位置了
+            // try {
+            //     MouseEventParser parser = new MouseEventParser("/dev/input/event12");
+            //     new Thread(new Runnable() {
+            //         @Override
+            //         public void run() {
+            //             while (true) {
+            //                 try {
+            //                     MouseEventParser.MouseEvent event = parser.readEvent();
+            //                     if (event != null) {
+            //                         L.d("Mouse Event: " + event);
+            //                     }
+            //                 } catch (IOException e) {
+            //                     L.e("Error reading mouse event: " + e.getMessage());
+            //                     break;
+            //                 }
+            //             }
+            //         }
+            //     }).start();
+            // } catch (IOException e) {
+            //     throw new RuntimeException(e);
+            // }
+            // L.d("receiver created: " + receiver);
+            // JNIBridge.nativeOpen();      // 创建 uinput 虚拟鼠标
+            //
+            // JNIBridge.nativeMove(20, 20);   // 鼠标右下移动 20 像素
+            // JNIBridge.nativeMove(-10, 0);   // 左移 10 像素
+            //
+            // JNIBridge.nativeClickLeft();    // 左键点击
 
-            double powerMw = (voltage * currentNowMa) / 1000.0; // 转换为毫瓦
-            L.d("当前功率: " + powerMw + " mW");
-            // convert W
-            double powerW = powerMw / 1000.0;
-            L.d("当前功率: " + powerW + " W");
-
-
+            // JNIBridge.nativeMoveMouse(100, 100); // 移动鼠标到屏幕坐标 (100, 100)
         } else {
             L.e("InputManagerPlugin requires Android M or higher");
         }
+    }
+
+
+    void getBatteryInfo() {
+        BatteryManager bm = (BatteryManager) ContextStore.getContext().getSystemService(Context.BATTERY_SERVICE);
+        int currentNow = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+        float currentNowMa = Math.abs(currentNow) / 1000.0f; // 转换为毫安
+        L.d("当前电流: " + currentNowMa + " mA");
+
+        int voltage = getBatteryVoltageFromCmd();
+        L.d("当前电压 (from cmd): " + voltage + " mV");
+
+        double powerMw = (voltage * currentNowMa) / 1000.0; // 转换为毫瓦
+        L.d("当前功率: " + powerMw + " mW");
+        // convert W
+        double powerW = powerMw / 1000.0;
+        L.d("当前功率: " + powerW + " W");
     }
 
     // InputManagerGlobal iMG = InputManagerGlobal.getInstance();
@@ -173,7 +216,7 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
         }
     };
 
-    void test() {
+    void test() throws NoSuchFieldException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         FakeContext.get().registerReceiver(batteryReceiver, filter);
@@ -191,11 +234,11 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
         // Log.d("Battery", "Voltage: " + voltage + " mV");
         // private IBatteryPropertiesRegistrar mBatteryPropertiesRegistrar
         // private IBatteryStats mBatteryStats
-        Object ooo = RH.gHF(batteryManager, "mBatteryPropertiesRegistrar");
+        Object ooo = RH.gF(batteryManager, "mBatteryPropertiesRegistrar");
         RH.l(ooo);
         // scheduleUpdate
-        RH.iHM(ooo, "scheduleUpdate");
-        Object oooo = RH.gHF(batteryManager, "mBatteryStats");
+        RH.iM(ooo, "scheduleUpdate");
+        Object oooo = RH.gF(batteryManager, "mBatteryStats");
         RH.l(oooo);
 
         // 获取当前电流 (微安 μA)
@@ -252,7 +295,7 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
             // com/android/server/SystemServiceManager.java
             Class<?> systemServiceManagerClass = serverClassLoader.loadClass("com.android.server.SystemServiceManager");
             // RH.l(systemServiceManagerClass);
-            Object ob = ReflectionHelper.createInstanceWithType(systemServiceManagerClass, new Class[]{Context.class}, FakeContext.get());
+            Object ob = RH.cI(systemServiceManagerClass, new Class[]{Context.class}, FakeContext.get());
             // RH.l(ob);
             // com/android/server/LocalServices.java
             Class<?> localServicesClass = serverClassLoader.loadClass("com.android.server.LocalServices");
@@ -447,9 +490,13 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
                 if (descriptor == null || targetDisplay == null) {
                     return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Missing parameters");
                 }
-                ReflectionHelper.invokeHiddenMethod(im, "removeUniqueIdAssociationByDescriptor", descriptor);
-                L.d("Remove: " + descriptor);
-                ReflectionHelper.invokeHiddenMethod(im, "addUniqueIdAssociationByDescriptor", descriptor, targetDisplay);
+                try {
+                    RH.iM(im, "removeUniqueIdAssociationByDescriptor", descriptor);
+                    L.d("Remove: " + descriptor);
+                    RH.iM(im, "addUniqueIdAssociationByDescriptor", descriptor, targetDisplay);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
                 // img.removeUniqueIdAssociationByPort("usb-xhci-hcd.1.auto-1/input1");
                 // img.addUniqueIdAssociationByPort("usb-xhci-hcd.1.auto-1/input1", targetDisplay);
                 JSONObject responseJson = new JSONObject();
@@ -495,7 +542,11 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
                 if (descriptor == null) {
                     return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "text/plain", "Missing parameters");
                 }
-                ReflectionHelper.invokeHiddenMethod(im, "removeUniqueIdAssociationByDescriptor", descriptor);
+                try {
+                    RH.iM(im, "removeUniqueIdAssociationByDescriptor", descriptor);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
                 L.d("Remove: " + descriptor);
                 JSONObject responseJson = new JSONObject();
                 try {
@@ -527,30 +578,32 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
                 // }
                 // 获取详细的设备信息
                 Map<String, Map<String, String>> detailedDeviceInfo = getDetailedDeviceInfo();
-
+                // ReflectionPrinter.listAllObject(im);
                 int[] deviceIds = im.getInputDeviceIds();
                 JSONObject jsonObject = new JSONObject();
                 JSONArray jsonArray = new JSONArray();
                 try {
                     for (int deviceId : deviceIds) {
                         InputDevice device = im.getInputDevice(deviceId);
+                        L.d("device: " + device);
                         JSONObject deviceJson = new JSONObject();
                         if (device != null) {
                             try {
-                                deviceJson.put("device_bus", ReflectionHelper.invokeHiddenMethod(device, "getDeviceBus"));
-                                int associatedDisplayId = ReflectionHelper.invokeHiddenMethod(device, "getAssociatedDisplayId");
+                                deviceJson.put("device_bus", RH.iM(device, "getDeviceBus"));
+                                int associatedDisplayId = RH.iM(device, "getAssociatedDisplayId");
                                 deviceJson.put("associatedDisplayId", associatedDisplayId);
-                            } catch (RuntimeException e) {
-                                L.d("Illegal access to getDeviceBus: " + e.getMessage());
+                            } catch (Exception e) {
+                                L.d("getDeviceBus error: " + e.getMessage());
                             }
                             try {
-                                int associatedDisplayId = ReflectionHelper.invokeHiddenMethod(device, "getAssociatedDisplayId");
+                                int associatedDisplayId = RH.iM(device, "getAssociatedDisplayId");
                                 deviceJson.put("associatedDisplayId", associatedDisplayId);
-                            } catch (RuntimeException e) {
+                            } catch (Exception e) {
                                 L.d("Illegal access to associatedDisplayId: " + e.getMessage());
                             }
                             // 添加从 getevent -i 获取的详细信息
                             String deviceName = device.getName();
+                            // L.d("Processing device: " + deviceName);
                             Map<String, String> details = detailedDeviceInfo.get(deviceName);
                             if (details != null) {
                                 // 将获取到的详细信息添加到 JSON 对象
@@ -563,14 +616,19 @@ public class InputManagerPlugin extends AndroidAPIPlugin {
                                 deviceJson.put("detailed_fw_version", details.get("fw_version"));
                                 deviceJson.put("detailed_path", details.get("path"));
                             }
-
-                            // 其他已有的信息
-                            int controllerNumber = ReflectionHelper.invokeHiddenMethod(device, "getControllerNumber");
-                            deviceJson.put("controllerNumber", controllerNumber);
-
-                            // 添加运动范围信息...
-                            int generation = ReflectionHelper.invokeHiddenMethod(device, "getGeneration");
-                            deviceJson.put("generation", generation);
+                            try {
+                                // 其他已有的信息
+                                int controllerNumber = RH.iM(device, "getControllerNumber");
+                                deviceJson.put("controllerNumber", controllerNumber);
+                            } catch (Exception e) {
+                                L.d("getControllerNumber error: " + e.getMessage());
+                            }
+                            try {
+                                int generation = RH.iM(device, "getGeneration");
+                                deviceJson.put("generation", generation);
+                            } catch (Exception e) {
+                                L.d("getGeneration error: " + e.getMessage());
+                            }
                             deviceJson.put("name", device.getName());
                             deviceJson.put("id", device.getId());
                             deviceJson.put("vendorId", device.getVendorId());

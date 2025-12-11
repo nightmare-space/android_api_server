@@ -11,11 +11,14 @@ import android.view.Display;
 import android.view.DisplayCutout;
 
 import com.nightmare.aas.ContextStore;
+import com.nightmare.aas.helper.L;
 import com.nightmare.aas.helper.RH;
 import com.nightmare.aas.helper.ReflectionHelper;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.lang.reflect.InvocationTargetException;
 
 public class DisplayHelper {
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
@@ -42,7 +45,11 @@ public class DisplayHelper {
             jsonObject.put("height", mode.getPhysicalHeight());
         }
         jsonObject.put("id", display.getDisplayId());
-        jsonObject.put("uniqueId", RH.iHM(display, "getUniqueId"));
+        try {
+            jsonObject.put("uniqueId", RH.iM(display, "getUniqueId"));
+        } catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+            L.d("Cannot get uniqueId: " + e.getMessage());
+        }
         jsonObject.put("name", display.getName());
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             DisplayCutout cutout = display.getCutout();
@@ -86,11 +93,11 @@ public class DisplayHelper {
                 // 或者通过特定Display获取
                 if (display != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     // Android 10及以上可以直接从Display获取信息
-                    Object displayInfo = ReflectionHelper.invokeHiddenMethod(display, "getDisplayInfo");
+                    Object displayInfo = ReflectionHelper.invokeMethod(display, "getDisplayInfo");
                     if (displayInfo != null) {
-                        Object cutoutObject = ReflectionHelper.getHiddenField(displayInfo, "displayCutout");
+                        Object cutoutObject = ReflectionHelper.getField(displayInfo, "displayCutout");
                         if (cutoutObject != null) {
-                            return (int) ReflectionHelper.getHiddenField(cutoutObject, "safeInsetTop");
+                            return (int) ReflectionHelper.getField(cutoutObject, "safeInsetTop");
                         }
                     }
                 }

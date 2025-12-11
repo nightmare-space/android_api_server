@@ -2,20 +2,20 @@ package com.nightmare.aas_plugins;
 
 import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 
+import fi.iki.elonen.NanoHTTPD;
+
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
-
-import com.nightmare.aas.foundation.AndroidAPIPlugin;
-import com.nightmare.aas.helper.L;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import fi.iki.elonen.NanoHTTPD;
+
+import com.nightmare.aas.foundation.AndroidAPIPlugin;
+
 
 public class CodecPlugin extends AndroidAPIPlugin {
-
 
     @Override
     public String route() {
@@ -69,5 +69,4 @@ public class CodecPlugin extends AndroidAPIPlugin {
         }
         return null;
     }
-
 }

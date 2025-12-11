@@ -21,6 +21,7 @@ import org.json.JSONObject;
 
 import fi.iki.elonen.NanoHTTPD;
 
+// 2025.12.06 on Android14 tested all passed.
 public class ActivityManagerPlugin extends AndroidAPIPlugin {
     public ActivityManagerPlugin() {
         IBinder binder = ServiceManager.getService(Context.ACTIVITY_SERVICE);

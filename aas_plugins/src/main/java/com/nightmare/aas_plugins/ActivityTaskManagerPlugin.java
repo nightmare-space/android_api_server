@@ -8,6 +8,7 @@ import android.app.ActivityManagerNative;
 import android.app.ActivityTaskManager;
 import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
+import android.app.TaskInfo;
 import android.content.ComponentName;
 import android.content.Context;
 import android.app.ITaskStackListener;
@@ -29,9 +30,13 @@ import android.util.LogPrinter;
 import android.util.Printer;
 import android.window.TaskSnapshot;
 
+import com.nightmare.aas.ContextStore;
 import com.nightmare.aas.foundation.AndroidAPIPlugin;
 import com.nightmare.aas.helper.L;
+import com.nightmare.aas.helper.RH;
 import com.nightmare.aas.helper.ReflectionHelper;
+import com.nightmare.aas.helper.ReflectionPrinter;
+import com.nightmare.aas_plugins.helper.AndroidVersions;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -39,12 +44,14 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
 import fi.iki.elonen.NanoHTTPD;
 
 /**
  * ActivityTaskManager Plugin
+ * 2025.12.06 on Android14 tested all passed.
  */
 public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
     public ActivityTaskManagerPlugin() {
@@ -259,11 +266,21 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
         L.d("id -> " + id);
         assert action != null;
         switch (action) {
+            case "get_tasks":
+                try {
+                    return newFixedLengthResponse(
+                            NanoHTTPD.Response.Status.OK,
+                            "application/json",
+                            getRecentTasks()
+                    );
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
             case "get_task_snapshot":
                 // TODO 这个是不是最多测到 Android15
                 byte[] bytes = null;
                 try {
-                    ReflectionHelper.listAllObject(iATM);
+                    // ReflectionPrinter.listAllObject(iATM);
                     Object snapshot = null;
                     int taskId = Integer.parseInt(id);
                     int SDK_INT = Build.VERSION.SDK_INT;
@@ -282,9 +299,14 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
                         snapshot = iATM.getTaskSnapshot(taskId, false, false);
                         L.d("snapshot -> " + snapshot);
                     }
-                    Object hardBuffer = ReflectionHelper.getHiddenField(snapshot, "mSnapshot");
+                    if (snapshot == null) {
+                        JSONObject returnObj = new JSONObject();
+                        returnObj.put("error", "snapshot is null");
+                        return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "application/json", returnObj.toString());
+                    }
+                    Object hardBuffer = RH.gF(snapshot, "mSnapshot");
                     L.d("hardBuffer -> " + hardBuffer);
-                    Object colorSpace = ReflectionHelper.getHiddenField(snapshot, "mColorSpace");
+                    Object colorSpace = RH.gF(snapshot, "mColorSpace");
                     //
                     if (SDK_INT >= Build.VERSION_CODES.S) {
                         HardwareBuffer hardwareBuffer = (HardwareBuffer) hardBuffer;
@@ -295,6 +317,7 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
                         bytes = baos.toByteArray();
                     }
                 } catch (Exception e) {
+                    e.printStackTrace();
                     throw new RuntimeException(e);
                 }
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "image/png", new ByteArrayInputStream(bytes), bytes.length);
@@ -312,7 +335,7 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
             case "set_focused_task":
                 int taskId = Integer.parseInt(id);
                 int displayId = Integer.parseInt(session.getParms().get("display_id"));
-                ReflectionHelper.listAllObject(iATM);
+                ReflectionPrinter.listAllObject(iATM);
                 try {
                     iATM.setFocusedTask(taskId);
                     iATM.setFocusedRootTask(taskId);
@@ -357,24 +380,22 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
                     throw new RuntimeException(e);
                 }
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", result.toString());
-            case "get_tasks":
-                try {
-                    return newFixedLengthResponse(
-                            NanoHTTPD.Response.Status.OK,
-                            "application/json",
-                            getRecentTasks()
-                    );
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+
         }
         return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", "{}");
     }
 
     String getRecentTasks() {
+        // ActivityManager 中对 getRecentTasks 的封装更好，都是返回 List
+        // 但是函数定义都是 getRecentTasks(int maxNum, int flags)
+        // 无法传入 UserId
         // Android 11 haven't getRecentTasks
-        Object recentTaskRaw = ReflectionHelper.invokeHiddenMethod(iATM, "getRecentTasks", 100, 0, -2);
-        List<ActivityManager.RecentTaskInfo> recentTaskInfos = ReflectionHelper.invokeHiddenMethod(recentTaskRaw, "getList");
+        List<ActivityManager.RecentTaskInfo> recentTaskInfos;
+        try {
+            recentTaskInfos = iATM.getRecentTasks(100, 0, -2).getList();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         JSONObject jsonObjectResult = new JSONObject();
         JSONArray jsonArray = new JSONArray();
         try {
@@ -386,7 +407,7 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
                     jsonObject.put("taskId", taskId);
                 }
                 try {
-                    int stackId = ReflectionHelper.getHiddenField(taskInfo, "stackId");
+                    int stackId = RH.gF(taskInfo, "stackId");
                     jsonObject.put("stackId", stackId);
                 } catch (Exception e) {
                     // Android 15 没有 stackId 字段
@@ -396,37 +417,49 @@ public class ActivityTaskManagerPlugin extends AndroidAPIPlugin {
                 jsonObject.put("persistentId", taskInfo.persistentId);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     // https://cs.android.com/android/platform/superproject/+/android11-release:frameworks/base/core/java/android/app/TaskInfo.java
-                    // R is Android 11
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        int displayId = ReflectionHelper.getHiddenField(taskInfo, "displayId");
+                    // https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/core/java/android/app/TaskInfo.java
+                    https:
+                    // cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/core/java/android/app/ActivityManager.java;drc=1d47d8a4ea1cb5d692200a2a3f9fef91c21b0542;l=2744
+                    if (Build.VERSION.SDK_INT >= AndroidVersions.API_30_ANDROID_11) {
+                        int displayId = RH.gF(TaskInfo.class, taskInfo, "displayId");
                         jsonObject.put("displayId", displayId);
                     }
-                    int affiliatedTaskId = ReflectionHelper.getHiddenField(taskInfo, "affiliatedTaskId");
+                    int affiliatedTaskId = RH.gF(taskInfo, "affiliatedTaskId");
                     jsonObject.put("affiliatedTaskId", affiliatedTaskId);
                     ActivityInfo topActivityInfo = null;
                     // Q is Android 10
                     if (Build.VERSION.SDK_INT > Build.VERSION_CODES.Q) {
-                        topActivityInfo = ReflectionHelper.getHiddenField(taskInfo, "topActivityInfo");
-                        // L.d("topActivityInfo -> " + topActivityInfo);
-                        int topActivityType = ReflectionHelper.getHiddenField(taskInfo, "topActivityType");
-                        // L.d("topActivityType -> " + topActivityType);
+                        topActivityInfo = RH.gF(TaskInfo.class, taskInfo, "topActivityInfo");
+                        // Below code for testing dump topActivityInfo
+                        // if (topActivityInfo != null) {
+                        //     Printer printWriter = new Printer() {
+                        //         private final java.io.PrintStream ps = new java.io.PrintStream(
+                        //                 new java.io.FileOutputStream(java.io.FileDescriptor.out), true);
+                        //
+                        //         @Override
+                        //         public void println(String x) {
+                        //             if (x == null) x = "null";
+                        //             ps.println(x);
+                        //         }
+                        //     };
+                        //
+                        //     topActivityInfo.dump(printWriter, "  ");
+                        //     jsonObject.put("topActivityInfo", topActivityInfo + "");
+                        // } else {
+                        //     jsonObject.put("topActivityInfo", "");
+                        // }
+                        int topActivityType = RH.gF(TaskInfo.class, taskInfo, "topActivityType");
                         jsonObject.put("topActivityType", topActivityType);
                     }
-                    if (topActivityInfo != null) {
-                        Printer printWriter = new LogPrinter(Log.DEBUG, "StandardOutput");
-                        topActivityInfo.dump(printWriter, "  ");
-                        jsonObject.put("topActivityInfo", topActivityInfo + "");
-                    } else {
-                        jsonObject.put("topActivityInfo", "");
-                    }
-                    // TODO resizeMode 在 android 11 就有，Sula 能不能借助这个来判断
+                    // TODO resizeMode 在 android 11 就有，TND 能不能借助这个来判断
                     // S is Android 12
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        boolean isVisible = ReflectionHelper.getHiddenField(taskInfo, "isVisible");
+                        // 是不是需要单独 catch，不然整个函数走不完
+                        boolean isVisible = RH.gF(TaskInfo.class, taskInfo, "isVisible");
                         jsonObject.put("isVisible", isVisible);
-                        boolean isRunning = ReflectionHelper.getHiddenField(taskInfo, "isRunning");
+                        boolean isRunning = RH.gF(TaskInfo.class, taskInfo, "isRunning");
                         jsonObject.put("isRunning", isRunning);
-                        boolean isFocused = ReflectionHelper.getHiddenField(taskInfo, "isFocused");
+                        boolean isFocused = RH.gF(TaskInfo.class, taskInfo, "isFocused");
                         jsonObject.put("isFocused", isFocused);
                     }
                     // 有的任务后台久了，会拿不到topActivity

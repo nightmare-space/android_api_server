@@ -1,9 +1,6 @@
 package com.nightmare.aas_plugins;
 
-import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
-
 import com.nightmare.aas.foundation.AndroidAPIPlugin;
-import com.nightmare.aas.helper.L;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -15,6 +12,8 @@ import java.io.FileReader;
 import java.io.IOException;
 
 import fi.iki.elonen.NanoHTTPD;
+
+import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 
 public class DeviceInfoPlugin extends AndroidAPIPlugin {
     @Override
