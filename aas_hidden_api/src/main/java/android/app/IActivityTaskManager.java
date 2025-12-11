@@ -1,12 +1,12 @@
 package android.app;
 
+import android.content.pm.ParceledListSlice;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.IInterface;
 import android.os.RemoteException;
 import android.window.TaskSnapshot;
-
 
 public interface IActivityTaskManager extends IInterface {
     TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution) throws RemoteException;
@@ -16,9 +16,11 @@ public interface IActivityTaskManager extends IInterface {
      */
     TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution, boolean takeSnapshotIfNeeded) throws RemoteException;
 
+    ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(
+            int maxNum, int flags, int userId) throws RemoteException;
+
     TaskSnapshot takeTaskSnapshot(int taskId) throws RemoteException;
 
-    //    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     TaskSnapshot takeTaskSnapshot(int taskId, boolean isLowResolution) throws RemoteException;
 
     // TODO 搞懂这个token是啥
@@ -35,6 +37,7 @@ public interface IActivityTaskManager extends IInterface {
     // setFocusedRootTask
     void setFocusedRootTask(int arg0) throws RemoteException;
 
+    // add after android13, not in android13
     void focusTopTask(int displayId) throws RemoteException;
 
     void resizeTask(int taskId, Rect bounds, int resizeMode) throws RemoteException;
