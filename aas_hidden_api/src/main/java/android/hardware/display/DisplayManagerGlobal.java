@@ -3,6 +3,8 @@ package android.hardware.display;
 import android.content.Context;
 import android.media.projection.MediaProjection;
 import android.os.Handler;
+import android.view.Display;
+
 
 import java.util.concurrent.Executor;
 
@@ -69,7 +71,7 @@ public class DisplayManagerGlobal {
     /**
      * formatter 和 pre 标签用于保留代码格式
      * 这个底层要判断当前显示器支不支持VRR，才会调用
-     * https://cs.android.com/android/platform/superproject/main/+/main:frameworks/base/services/core/java/com/android/server/display/mode/DisplayModeDirector.java;drc=ee890b38c66c7e32c7c0fa2994c75b4a0a70b539;l=568
+     * <a href="https://cs.android.com/android/platform/superproject/main/+/main:frameworks/base/services/core/java/com/android/server/display/mode/DisplayModeDirector.java;drc=ee890b38c66c7e32c7c0fa2994c75b4a0a70b539;l=568">...</a>
      * `@formatter:off`
      * <pre>
      * public void requestDisplayModes(IBinder token, int displayId, int[] modeIds) {
@@ -90,6 +92,10 @@ public class DisplayManagerGlobal {
         throw new RuntimeException("STUB");
     }
 
+    public void requestColorMode(int displayId, int colorMode) {
+        throw new RuntimeException("STUB");
+    }
+
     public void setShouldAlwaysRespectAppRequestedMode(boolean enabled) {
         throw new RuntimeException("STUB");
     }
@@ -103,6 +109,18 @@ public class DisplayManagerGlobal {
     }
 
     public int getRefreshRateSwitchingType() {
+        throw new RuntimeException("STUB");
+    }
+
+    public int[] getDisplayIds() {
+        throw new RuntimeException("STUB");
+    }
+
+    public Display getRealDisplay(int displayId) {
+        throw new RuntimeException("STUB");
+    }
+
+    public void setUserPreferredDisplayMode(int displayId, Display.Mode mode) {
         throw new RuntimeException("STUB");
     }
 }

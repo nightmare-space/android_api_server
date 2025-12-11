@@ -3,7 +3,7 @@ package android.hardware.input;
 import android.view.InputDevice;
 
 public class InputManager {
-    static android.hardware.input.InputManager getInstance() {
+    static InputManager getInstance() {
         throw new RuntimeException("STUB");
     }
 

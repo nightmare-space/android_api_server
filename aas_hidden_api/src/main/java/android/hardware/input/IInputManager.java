@@ -11,7 +11,13 @@ public interface IInputManager {
             String displayUniqueId
     );
 
+    int[] getInputDeviceIds();
+
+    int isInTabletMode();
+
     void removeUniqueIdAssociationByDescriptor(String inputDeviceDescriptor);
+
+    boolean injectInputEvent(InputEvent event, int mode);
 
     abstract class Stub extends Binder implements IInputManager {
         public static IInputManager asInterface(IBinder obj) {
