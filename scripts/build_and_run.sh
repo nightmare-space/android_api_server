@@ -37,6 +37,7 @@ kill_all_server(){
         echo "没有找到 aas 相关进程"
     else
         echo "找到 aas 相关进程 PID:$pidof_result 停止中"
+        echo $pidof_result | adb shell xargs kill -9
         # use su -c to kill
         echo $pidof_result | adb shell su -c "xargs kill -9"
     fi

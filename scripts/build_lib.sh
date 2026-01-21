@@ -6,7 +6,7 @@ LOCAL_DIR=$(
     pwd
 )
 # 设置 Android NDK 路径
-NDK_PATH=/Users/lori/Library/Android/sdk/ndk/26.3.11579264
+NDK_PATH=/Volumes/Mac/Android/sdk/ndk/26.3.11579264
 if [ -z "$NDK_PATH" ]; then
     echo "请设置 NDK_PATH 为 Android NDK 的路径"
     exit 1

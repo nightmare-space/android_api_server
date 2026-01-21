@@ -63,14 +63,14 @@ SRC=( \
     $AAS_SRC_DIR/com/nightmare/aas/foundation/*.java \
     $AAS_SRC_DIR/com/nightmare/aas/helper/*.java \
     $ASS_PLUGINS_SRC_DIR/com/nightmare/aas_plugins/*.java \
-    $ASS_PLUGINS_SRC_DIR/com/nightmare/aas_plugins/util/*.java \
+    $ASS_PLUGINS_SRC_DIR/com/nightmare/aas_plugins/helper/*.java \
     $AAS_INTEGRATE_SRC_DIR/com/nightmare/aas_integrated/*.java \
 )
 
 HIDDEN=( \
-    $HIDDEN_API_DIR/android/content/pm/*.java \
     $HIDDEN_API_DIR/android/os/*.java \
     $HIDDEN_API_DIR/android/app/*.java \
+    $HIDDEN_API_DIR/android/content/pm/*.java \
     $HIDDEN_API_DIR/android/window/*.java \
     $HIDDEN_API_DIR/android/graphics/*.java \
     $HIDDEN_API_DIR/android/hardware/display/*.java \
@@ -78,7 +78,6 @@ HIDDEN=( \
     $HIDDEN_API_DIR/android/hardware/health/*.java \
     $HIDDEN_API_DIR/android/ddm/*.java \
     $HIDDEN_API_DIR/android/view/*.java \
-    $HIDDEN_API_DIR/androidx/annotation/*.java \
     $HIDDEN_API_DIR/com/android/internal/os/*.java \
     $HIDDEN_API_DIR/com/android/server/display/*.java \
     $HIDDEN_API_DIR/com/android/server/health/*.java \
@@ -92,6 +91,7 @@ do
     CLASSES+=("${src%.java}.class")
 done
 CLASSES+=("com/nightmare/aas_plugins/ActivityTaskManagerPlugin\$1.class")
+CLASSES+=("com/nightmare/aas_plugins/ActivityTaskManagerPlugin\$2.class")
 CLASSES+=("com/nightmare/aas_plugins/InputManagerPlugin\$1.class")
 CLASSES+=("com/nightmare/aas_plugins/InputManagerPlugin\$2.class")
 CLASSES+=("com/nightmare/aas_plugins/InputManagerPlugin\$3.class")

@@ -24,6 +24,45 @@ AAS provides a ready-to-use [Flutter Plugin](https://github.com/nightmare-space/
 
 ## Architecture Diagram
 
+```text
+调用端（PC / Flutter / Web / 任意 HTTP 客户端）                         目标设备进程（Android）
+┌──────────────────────────────────────────────┐                  ┌──────────────────────────────────────────────┐
+│ Client 层                                    │                  │ AAS 设备端进程（HTTP Server）                │
+│  - AASClient（Flutter 插件/自写客户端）      │                  │  - Activity Mode：集成到 App 里启动          │
+│  - 仅感知：IP/Port + key                     │                  │  - Dex Mode：adb shell app_process 启动      │
+│  - 调用 REST：/check /display_manager/...    │                  │  - 监听端口：NanoHTTPD                       │
+└─────────────────────┬────────────────────────┘                  └───────────────────────┬──────────────────────┘
+                      │                        HTTP 请求（带 key）                        │
+                      │                 直连(同机) / adb forward(跨机)                    │
+                      ├──────────────────────────────────────────────────────────────────►│
+                      │                                                                   │
+                      │                                                                   │ 路由分发（按 plugin.route 前缀匹配）
+                      │                                                                   ▼
+                      │                                            ┌──────────────────────────────────────────────┐
+                      │                                            │ 插件层（Plugins，按模块拆分 Android 能力）   │
+                      │                                            │  - DisplayManagerPlugin：枚举显示器/建VD等   │
+                      │                                            │  - ActivityManagerPlugin / TaskManager...    │
+                      │                                            │  - InputManagerPlugin：输入/按键/注入相关    │
+                      │                                            │  - PackageManagerPlugin：应用信息/图标等     │
+                      │                                            │  - FilePlugin / DeviceInfoPlugin / Codec...  │
+                      │                                            └───────────────────────┬─────·─────────────────┘
+                      │                                                                    │
+                      │                                                                    │ 反射/Wrapper/FakeContext（Dex Mode 常用）
+                      │                                                                    ▼
+                      │                                             ┌─────────────────────────────────────────────┐
+                      │                                             │ Android Framework/系统服务                  │
+                      │                                             │  - DisplayManager / WindowManager           │
+                      │                                             │  - Activity/Task 管理服务                   │
+                      │                                             │  - Input/Package/File 等系统 API            │
+                      │                                             └─────────────────────────────────────────────┘
+PC 侧端口转发典型链路（Dex Mode）：
+PC:Client  ──HTTP──>  localhost:PORT
+                ▲
+                │ adb forward tcp:PORT tcp:PORT
+                │
+Android:shell 2000 上的 AAS Dex 进程（监听 PORT）
+```
+
 ![](docs/applib.excalidraw.png)
 
 For upper-layer applications, only the Address and Port are perceived, regardless of the running mode.
