@@ -1,33 +1,47 @@
 package com.nightmare.aas.helper;
 
+import java.lang.reflect.InvocationTargetException;
+
 /**
  * @noinspection UnusedReturnValue
  */
 public class RH {
 
-    public static <T> T gHF(Object obj, String fieldName) {
-        return ReflectionHelper.getHiddenField(obj, fieldName);
+    public static <T> T gF(Object obj, String fieldName) throws NoSuchFieldException, IllegalAccessException {
+        return ReflectionHelper.getField(obj, fieldName);
     }
 
-    public static <T> T iHM(Object obj, String methodName, Object... args) {
-        return ReflectionHelper.invokeHiddenMethod(obj, methodName, args);
+
+    public static <T> T gF(Class<?> clazz, Object obj, String fieldName) throws NoSuchFieldException, IllegalAccessException {
+        return ReflectionHelper.getField(clazz, obj, fieldName);
     }
 
-    public static <T> T iSM(Class<?> clazz, String methodName, Object... args) {
-        return ReflectionHelper.invokeStaticMethod(clazz, methodName, args);
+    // Invoke Method
+    public static <T> T iM(Object obj, String methodName, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        return ReflectionHelper.invokeMethod(obj, methodName, args);
     }
 
-    public static <T> T iSMWT(Class<?> clazz, String methodName, Class<?>[] parameterTypes, Object... args) {
-        return ReflectionHelper.invokeStaticMethodWithType(clazz, methodName, parameterTypes, args);
+    public static <T> T iM(Class<?> clazz, String methodName, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        return ReflectionHelper.invokeMethod(clazz, methodName, args);
     }
 
-    // setHiddenField
-    public static void sHF(Object obj, String fieldName, Object value) {
-        ReflectionHelper.setHiddenField(obj, fieldName, value);
+    public static void iM(Object obj, String methodName, Class<?>[] parameterTypes, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        ReflectionHelper.invokeMethod(obj, methodName, parameterTypes, args);
     }
 
-    public static void iHMWT(Object obj, String methodName, Class<?>[] parameterTypes, Object... args) {
-        ReflectionHelper.invokeHiddenMethodWithType(obj, methodName, parameterTypes, args);
+    // Invoke Method with Parameter types
+    public static <T> T iMWP(Object obj, String methodName, Class<?>[] parameterTypes, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        return ReflectionHelper.invokeMethodWithParam(obj, methodName, parameterTypes, args);
+    }
+
+    // Invoke Method with Parameter types
+    public static <T> T iMWP(Class<?> clazz, Object obj, String methodName, Class<?>[] parameterTypes, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        return ReflectionHelper.invokeMethodWithParam(clazz, obj, methodName, parameterTypes, args);
+    }
+
+    // Set Field
+    public static void sF(Object obj, String fieldName, Object value) throws NoSuchFieldException, IllegalAccessException {
+        ReflectionHelper.setField(obj, fieldName, value);
     }
 
     public static void l(Object object) {
@@ -35,11 +49,15 @@ public class RH {
     }
 
     public static void l(Class<?> clazz) {
-        ReflectionHelper.listAllObject(clazz);
+        ReflectionPrinter.listAllObject(clazz);
     }
 
-    public static <T> T cIWT(Class<T> clazz, Class<?>[] parameterTypes, Object... args) {
-        return ReflectionHelper.createInstanceWithType(clazz, parameterTypes, args);
+    public static <T> T cI(Class<T> clazz, Class<?>[] parameterTypes, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException, InstantiationException {
+        return ReflectionHelper.createInstance(clazz, parameterTypes, args);
+    }
+
+    public static <T> T cI(Class<T> clazz, Object... args) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException, InstantiationException {
+        return ReflectionHelper.createInstance(clazz, args);
     }
 }
 

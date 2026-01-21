@@ -4,7 +4,6 @@ import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 
 import android.annotation.SuppressLint;
 import android.app.ActivityManagerNative;
-import android.app.ActivityThread;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
