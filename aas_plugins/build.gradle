@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.library'
-    id 'maven-publish'
 }
 
 android {
@@ -28,14 +27,4 @@ dependencies {
     compileOnly project(':aas_hidden_api')
 }
 
-publishing {
-    publications {
-        release(MavenPublication) {
-            groupId = group
-            artifactId = 'ass_plugins'
-            afterEvaluate {
-                from components.findByName('release')
-            }
-        }
-    }
-}
+apply from: rootProject.file('publishing.gradle')
