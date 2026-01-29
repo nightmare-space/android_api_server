@@ -12,6 +12,7 @@ import com.nightmare.aas_plugins.DeviceInfoPlugin;
 import com.nightmare.aas_plugins.DisplayManagerPlugin;
 import com.nightmare.aas_plugins.FilePlugin;
 import com.nightmare.aas_plugins.InputManagerPlugin;
+import com.nightmare.aas_plugins.NotificationPlugin;
 import com.nightmare.aas_plugins.PackageManagerPlugin;
 
 import java.io.FileDescriptor;
@@ -86,6 +87,7 @@ public class AASIntegrate {
             server.registerPlugin(new DisplayManagerPlugin());
             server.registerPlugin(new FilePlugin());
             server.registerPlugin(new InputManagerPlugin());
+            server.registerPlugin(new NotificationPlugin());
             server.registerPlugin(new PackageManagerPlugin());
         } catch (NoClassDefFoundError e) {
             // some android versions may not have these classes

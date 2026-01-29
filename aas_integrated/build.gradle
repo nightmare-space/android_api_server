@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.library'
-    id 'maven-publish'
 }
 
 android {
@@ -28,30 +27,4 @@ dependencies {
     api project(':aas_plugins')
 }
 
-publishing {
-    publications {
-        release(MavenPublication) {
-            groupId = group
-            artifactId = 'aas_integrated'
-            afterEvaluate {
-                from components.findByName('release')
-            }
-        }
-    }
-}
-
-// afterEvaluate {
-//     publishing {
-//         publications {
-//             // Creates a Maven publication called "release".
-//             release(MavenPublication) {
-//                 from components.findByName('release')
-//                 groupId = group
-//                 artifactId = 'aas_integrated'
-//                 version = '1.0.0'
-//             }
-//         }
-//     }
-// }
-
-//https://jitpack.io/com/github/nightmare-space/android_api_server/0.1.15
+apply from: rootProject.file('publishing.gradle')
