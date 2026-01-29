@@ -75,12 +75,9 @@ HIDDEN=( \
     $HIDDEN_API_DIR/android/graphics/*.java \
     $HIDDEN_API_DIR/android/hardware/display/*.java \
     $HIDDEN_API_DIR/android/hardware/input/*.java \
-    $HIDDEN_API_DIR/android/hardware/health/*.java \
     $HIDDEN_API_DIR/android/ddm/*.java \
     $HIDDEN_API_DIR/android/view/*.java \
     $HIDDEN_API_DIR/com/android/internal/os/*.java \
-    $HIDDEN_API_DIR/com/android/server/display/*.java \
-    $HIDDEN_API_DIR/com/android/server/health/*.java \
 )
 
 CLASSES=()

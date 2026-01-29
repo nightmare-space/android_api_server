@@ -1,0 +1,13 @@
+apply plugin: 'maven-publish'
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.findByName('release')
+                groupId = group
+                artifactId = project.name
+            }
+        }
+    }
+}
